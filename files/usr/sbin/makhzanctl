@@ -393,6 +393,8 @@ apply() {
 		uci -q get minidlna.config >/dev/null || { fail 'Unsupported MiniDLNA configuration'; return 1; }
 		uci -q delete minidlna.config.media_dir
 		uci add_list minidlna.config.media_dir="$r/media"; uci set minidlna.config.enabled=1
+		# TVs list the server by this name; replace only the package default, never a custom name.
+		case "$(uci -q get minidlna.config.friendly_name)" in ''|'OpenWrt DLNA Server') uci set minidlna.config.friendly_name=Makhzan;; esac
 		uci -q get minidlna.config.interface >/dev/null || uci set minidlna.config.interface=br-lan
 		uci commit minidlna && /etc/init.d/minidlna enable && /etc/init.d/minidlna restart >/dev/null 2>&1 || { fail 'MiniDLNA configuration or restart failed'; return 1; }
 	elif command -v minidlnad >/dev/null && uci -q get minidlna.config >/dev/null; then
