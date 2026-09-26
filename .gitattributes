@@ -1,0 +1,5 @@
+# Copyright (C) 2026 dreamboxone
+# SPDX-License-Identifier: GPL-3.0-only
+# Router scripts must keep Unix line endings on every platform.
+* text=auto eol=lf
+*.woff2 binary
