@@ -27,6 +27,9 @@ minidlna 1.3.3, 16 GB USB flash drive. Client: Windows 11. Date: 2026-09-26.
 | SMB | Admin unlock; password change | Pass |
 | Auth | Password handover under a restricted rpcd session: one-time 0600 file, deleted on use; forged token and writes outside the allowed path refused | Pass |
 | Auth | Creating an existing username reports "already exists" | Pass |
+| Auth | From the LuCI page: create user, change password, folders (Unicode create/rename/delete) | Pass |
+| Boot | Reboot: NAS auto-mounted, Samba shares, lockout policy (re-applied from RAM) and MiniDLNA restored; files kept | Pass |
+| Boot | After reboot: 4 wrong passwords lock the account (Windows "locked out"), page shows the lock, Unlock button restores access | Pass |
 | Folders | Unicode names, rename, trash; `..`, `../../etc`, `a:b`, newline names rejected | Pass |
 | Folders | Planted symlink not listed and not operable | Pass |
 | DLNA | Enable → minidlnad listening on 8200 with ROOT/media | Pass |
