@@ -95,6 +95,8 @@
 .mk-field span{display:block;font-weight:700;margin-bottom:2px}
 .mk-field input{width:100%}
 .mk-msg{color:#c81e3a;min-height:1em;font-weight:600}
+.mk-type-this{direction:ltr;unicode-bidi:isolate;background:#fff1f2;color:#be123c;border:1px solid #fecdd3;border-radius:8px;padding:2px 8px;font-weight:700;user-select:all}
+.mk-dark .mk-type-this{background:#3d1f2a;color:#ffc2cd;border-color:#7a3346}
 .mk-select{display:flex;align-items:center;gap:10px;background:var(--soft);border:1px solid var(--line);border-radius:14px;padding:4px 12px;margin:10px 0;color:#8b5cf6}
 .mk-select select{flex:1;border:0;background:transparent;margin:0}
 .mk-unit{display:flex;align-items:center;gap:8px}

@@ -266,10 +266,10 @@ return view.extend({
 			p.a.focus();
 		}
 		function deleteUser(user) {
-			var typed = E('input', { 'placeholder': user, 'dir': 'ltr' }), msg = E('p', { 'class': 'mk-msg' });
+			var typed = E('input', { 'dir': 'ltr', 'autocomplete': 'off', 'spellcheck': 'false' }), msg = E('p', { 'class': 'mk-msg' });
 			modal(t('حذف کاربر ', 'Delete user ') + user, [
 				E('p', { 'class': 'mk-alert error' }, [ icon('alert'), E('span', {}, t('حساب و اشتراک SMB این کاربر حذف می‌شود. پوشهٔ خصوصی او به سطل بازیابی منتقل می‌شود و تا خالی‌کردن سطل قابل بازیابی دستی است.', 'The account and its SMB share are removed. The private folder is moved to the recovery trash and can be recovered manually until the trash is emptied.')) ]),
-				field(t('برای تأیید، نام کاربر را تایپ کنید', 'Type the username to confirm'), typed), msg,
+				field([ t('برای تأیید، دقیقاً این را تایپ کنید: ', 'To confirm, type exactly: '), E('code', { 'class': 'mk-type-this' }, user) ], typed), msg,
 				actions([ btn(t('حذف کاربر', 'Delete user'), function() {
 					if (typed.value.trim() !== user) { msg.textContent = t('نام یکسان نیست.', 'Name does not match.'); return; }
 					return call([ 'del-user', user ]).then(function() { ui.hideModal(); return refresh(); }).catch(function(e) { msg.textContent = msgOf(e); });
@@ -409,6 +409,14 @@ return view.extend({
 			return alertBox('warn', 'alert', t('هشدار: ' + names + ' تقریباً کل فضای دیسک را می‌گیرد و فقط ' + mibToMB(w.free) + ' مگابایت می‌ماند؛ فضایی برای فایل‌سرور (NAS) باقی نمی‌ماند. اگر از فایل‌سرور استفاده نمی‌کنید می‌توانید ادامه دهید.',
 				'Warning: ' + names + ' take almost the whole disk, leaving only ' + mibToMB(w.free) + ' MB; no room remains for the file server (NAS). You may continue if you do not need the file server.'));
 		}
+		/* Informational: a plan without NAS leaves the rest unused until the disk is erased again. */
+		function noNasNote(v, total) {
+			var free = total - 16 - (+v[0]) - (+v[1]) - (+v[2]);
+			if (+v[2] > 0 || nasWarning(v, total)) return E('span');
+			return alertBox('', 'server', [ t('فایل‌سرور (NAS) در این طرح نیست؛ ', 'This plan has no file server (NAS); '), num(mibToMB(Math.max(0, free)) + ' MB'),
+				t(' بدون استفاده می‌ماند و بعداً فقط با پاک‌کردن دوبارهٔ دیسک قابل استفاده است. تا دیسک NAS نداشته باشید، پوشه‌ها و اشتراک‌های کاربران در دسترس نیستند.',
+				  ' stays unused and can only be used later by erasing the disk again. User folders and shares are unavailable until a NAS disk exists.') ]);
+		}
 		function plot() {
 			var disk = current(), total = disk ? disk.size_mib : 0, v = values(), used = v.reduce(function(s, x) { return s + (+x); }, 0);
 			bar.replaceChildren();
@@ -416,7 +424,7 @@ return view.extend({
 			var remaining = total - used - 16;
 			summary.replaceChildren(t('انتخاب‌شده: ', 'Allocated: '), num(mibToMB(used) + ' MB'), ' · ', t('باقی‌مانده (بدون استفاده): ', 'Remaining (unused): '), num(mibToMB(Math.max(0, remaining)) + ' MB'));
 			summary.className = 'mk-summary' + (total && remaining < 0 ? ' mk-alert error' : '');
-			nasWarn.replaceChildren(total && remaining >= 0 && used > 0 ? warningNode(nasWarning(v, total)) : E('span'));
+			nasWarn.replaceChildren(total && remaining >= 0 && used > 0 ? warningNode(nasWarning(v, total)) : E('span'), total && remaining >= 0 && used > 0 ? noNasNote(v, total) : E('span'));
 			devInfo.replaceChildren();
 			if (disk && (disk.mounts.length || disk.swap_active)) {
 				devInfo.appendChild(E('div', { 'class': 'mk-alert' }, [ icon('alert'), E('span', {}, t('این دیسک در حال استفاده است', 'This disk is in use') + (disk.mounts.length ? ' (' + disk.mounts.join(', ') + ')' : '') + (disk.swap_active ? ' · swap' : '') + '. '),
@@ -437,7 +445,7 @@ return view.extend({
 			if (roles.some(function(r) { return r.check.checked && (!/^\d+$/.test(r.input.value) || Number(r.input.value) < Number(r.input.min)); }))
 				throw new Error(t('حجم معتبر وارد کنید (extroot حداقل ۱۳۴، swap حداقل ۱۷ و NAS حداقل ۳۴ مگابایت).', 'Enter valid sizes (extroot ≥ 134, swap ≥ 17, NAS ≥ 34 MB).'));
 			return call([ 'storage-plan', disk ].concat(v)).then(function(plan) {
-				var typed = E('input', { 'placeholder': disk, 'dir': 'ltr', 'aria-label': t('تأیید نام دیسک', 'Confirm disk name') }), msg = E('p', { 'class': 'mk-msg' });
+				var typed = E('input', { 'dir': 'ltr', 'autocomplete': 'off', 'spellcheck': 'false', 'aria-label': t('تأیید نام دیسک', 'Confirm disk name') }), msg = E('p', { 'class': 'mk-msg' });
 				var w = plan.nas_space_warning ? { who: plan.nas_space_consumers, free: plan.unallocated_mib } : null;
 				modal(t('تأیید نهایی تقسیم حافظه', 'Confirm disk allocation'), [
 					alertBox('error', 'alert', [ t('تمام اطلاعات این دیسک پاک می‌شود: ', 'All data on this disk will be erased: '), num(disk) ]),
@@ -446,10 +454,11 @@ return view.extend({
 					})),
 					E('p', {}, [ t('بدون تخصیص: ', 'Unallocated: '), num(mibToMB(plan.unallocated_mib) + ' MB') ]),
 					warningNode(w),
+					noNasNote(v, (current() || { size_mib: 0 }).size_mib),
 					+v[0] ? alertBox('', 'refresh', t('بعد از آماده‌شدن extroot باید روتر را ریبوت کنید.', 'After extroot is prepared the router must be rebooted.')) : E('span'),
-					field(t('برای تأیید، نام دیسک را تایپ کنید', 'Type the disk name to confirm'), typed), msg,
+					field([ t('برای تأیید، دقیقاً این را تایپ کنید: ', 'To confirm, type exactly: '), E('code', { 'class': 'mk-type-this' }, disk) ], typed), msg,
 					actions([ btn(t('پاک‌کردن و ساخت', 'Erase and create'), function() {
-						if (typed.value.trim() !== disk) { msg.textContent = t('نام دیسک یکسان نیست.', 'Disk name does not match.'); return; }
+						if (typed.value.trim() !== disk) { msg.textContent = t('متن تایپ‌شده با ' + disk + ' یکسان نیست.', 'The typed text does not match ' + disk + '.'); typed.focus(); return; }
 						return call([ 'storage-apply', disk ].concat(v, [ 'ERASE:' + disk + ':' + v.join(':') ])).then(function() {
 							ui.hideModal(); lastJob = 'running'; return refresh();
 						}).catch(function(e) { msg.textContent = msgOf(e); });
