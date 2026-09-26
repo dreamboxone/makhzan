@@ -202,7 +202,7 @@ rm -f /etc/config/makhzan
 - اگر USB حاوی extroot جدا شود، روتر با حافظهٔ داخلی (تنظیمات قبل از extroot) بالا می‌آید.
 
 **Samba و ورود**
-- مخزن برای فعال‌کردن قفل ورود، سه تنظیم به قالب Samba (`/etc/samba/smb.conf.template`) اضافه می‌کند: پایگاه رمز `tdbsam`، پنهان‌کردن اشتراک‌های غیرمجاز و خاموش‌کردن `unix extensions`. این تنظیمات روی **سایر اشتراک‌های Samba روتر هم اثر دارند**. با حذف برنامه دو تنظیم آخر برداشته می‌شوند ولی `tdbsam` می‌ماند تا رمزها از بین نروند.
+- مخزن چهار تنظیم به قالب Samba (`/etc/samba/smb.conf.template`) اضافه می‌کند: پایگاه رمز `tdbsam` (برای قفل ورود)، پنهان‌کردن اشتراک‌های غیرمجاز، خاموش‌کردن `unix extensions` و `map to guest = Never` (رد کاربر ناشناس به‌جای ورود مهمان، تا ویندوز پنجرهٔ رمز را نشان دهد). این تنظیمات روی **سایر اشتراک‌های Samba روتر هم اثر دارند**؛ اشتراک مهمان (بدون رمز) دیگر کار نمی‌کند. با حذف برنامه همه به‌جز `tdbsam` برداشته می‌شوند تا رمزها از بین نروند.
 - تنظیم قفل ورود در RAM نگه‌داری می‌شود و در هر بوت دوباره اعمال می‌شود؛ در چند ثانیهٔ اول بوت (قبل از اجرای مخزن) قفل فعال نیست.
 - زمان قفل با ساعت روتر محاسبه می‌شود؛ روتر باید ساعت درست (NTP) داشته باشد.
 - قفل ورود فقط روی SMB اعمال می‌شود (رمز ورود LuCI و SSH جداست).
@@ -317,7 +317,7 @@ Windows connects to a server as only one user at a time: after logging in as one
 - USB disks only; the NAS filesystem must be ext2/3/4, btrfs or xfs (FAT/exFAT/NTFS are refused because they cannot enforce private folders).
 - The planner erases the whole disk; it cannot resize. Unallocated space can only be used later by re-partitioning (erasing). One NAS disk at a time. No per-user quotas.
 - Extroot needs a reboot; a disk holding the active extroot cannot be released. To undo extroot: power off, unplug the USB disk, boot (the router uses internal storage), run `uci set fstab.makhzan_extroot.enabled=0; uci commit fstab`, then plug the disk back in.
-- To enable lockout, Makhzan appends three settings to `/etc/samba/smb.conf.template` (tdbsam, access-based share enumeration, unix extensions off). They also affect other Samba shares on the router. Removal takes the last two out; tdbsam stays so passwords are not lost. The lockout policy lives in RAM and is re-applied at every boot (not active during the first seconds of boot) and relies on a correct router clock. Lockout applies to SMB only.
+- Makhzan appends four settings to `/etc/samba/smb.conf.template`: tdbsam (lockout), access-based share enumeration, unix extensions off, and `map to guest = Never` (unknown accounts are rejected instead of becoming guests, so Windows shows its password prompt). They also affect other Samba shares on the router; guest (passwordless) shares stop working. Removal takes all of them out except tdbsam, so passwords are not lost. The lockout policy lives in RAM and is re-applied at every boot (not active during the first seconds of boot) and relies on a correct router clock. Lockout applies to SMB only.
 - SMB2/SMB3 only, LAN only. Use a VPN for remote access; never expose SMB to the internet.
 - Usernames: lowercase a-z, 0-9, `_`, `-` (max 31); `shared`, `media`, `homes`, `root`, `admin` are reserved. Folder names cannot contain `/ \ : * ? " < > |` or end with a dot/space.
 - The web UI manages top-level folders only; files are handled over SMB. Files deleted over SMB do not go to the recovery trash. Restoring from the trash requires SSH.

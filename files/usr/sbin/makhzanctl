@@ -127,8 +127,9 @@ valid_home() {
 smb_installed() { command -v smbd >/dev/null && command -v smbpasswd >/dev/null && command -v pdbedit >/dev/null && [ -f /etc/config/samba4 ]; }
 # Samba settings Makhzan needs, appended to the [global] template as marked lines (the last value wins):
 # tdbsam stores bad-password counters (lockout), access-based enumeration hides other users' private shares,
-# and disabling SMB1 unix extensions prevents clients from creating symlinks.
-SMB_SETTINGS='passdb backend = tdbsam|access based share enum = yes|unix extensions = no'
+# disabling SMB1 unix extensions prevents clients from creating symlinks, and rejecting unknown accounts
+# (instead of OpenWrt's guest mapping) makes Windows show its password prompt rather than a guest failure.
+SMB_SETTINGS='passdb backend = tdbsam|access based share enum = yes|unix extensions = no|map to guest = Never'
 smb_template_on() {
 	[ -f "$SMB_TEMPLATE" ] || return 1
 	changed=0

@@ -54,8 +54,9 @@ This document is not a certification.
 - The router's root user can read and change everything.
 - DLNA has no authentication; `Media` is readable by every LAN device.
 - Lockout uses the wall clock and is not active during the first seconds of boot.
-- Makhzan appends tdbsam, access-based share enumeration and unix extensions
-  off to `/etc/samba/smb.conf.template`; this affects other Samba shares.
+- Makhzan appends tdbsam, access-based share enumeration, unix extensions
+  off and `map to guest = Never` to `/etc/samba/smb.conf.template`; this
+  affects other Samba shares (guest shares stop working).
   Removal takes out the last two and keeps tdbsam, because accounts created
   under tdbsam cannot be exported back to smbpasswd without losing them.
 - No quotas; no transactional rollback of service configuration.
