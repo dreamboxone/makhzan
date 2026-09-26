@@ -7,7 +7,9 @@
 # of the GNU General Public License version 3 as published by the Free Software Foundation.
 # It is distributed WITHOUT ANY WARRANTY; see the LICENSE file for details.
 # Makhzan NAS control plane. Input is intentionally narrow: UI text is never evaluated by a shell.
-# Passwords arrive only in the MAKHZAN_PASSWORD environment variable, never on the command line.
+# Passwords never travel on the command line: the LuCI page writes a one-time 0600 file
+# SECRET_DIR/secret.<32 hex> (rpcd refuses exec environments for sessions) and passes only the token;
+# root shell users may set MAKHZAN_PASSWORD instead.
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 umask 077
 . /usr/libexec/makhzan-usb.sh || exit 1
@@ -15,6 +17,7 @@ umask 077
 VERSION=1.1.0
 SMB_TEMPLATE=/etc/samba/smb.conf.template
 CONTROL_LOCK=/var/lock/makhzan-control.lock
+SECRET_DIR=/tmp/run/makhzan
 RESERVED='shared media homes global printers print$ ipc$ root admin'
 
 quote() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/[[:cntrl:]]/ /g'; }
@@ -35,6 +38,27 @@ valid_name() {
 	[ -n "$1" ] && [ "$(printf '%s' "$1" | wc -c)" -le 255 ] || return 1
 	case "$1" in *[/\\:*?\"\<\>\|]*|' '*|*' '|*.) return 1;; esac
 	no_cntrl "$1"
+}
+# Reads (and always deletes) the one-time password file for TOKEN; falls back to MAKHZAN_PASSWORD.
+read_password() {
+	pw=''
+	if [ -n "$1" ]; then
+		printf '%s' "$1" | grep -Eq '^[0-9a-f]{32}$' && [ "$(printf '%s' "$1" | wc -l)" -eq 0 ] || return 1
+		f="$SECRET_DIR/secret.$1"
+		[ -f "$f" ] && [ ! -L "$f" ] || return 1
+		set -- $(ls -ln "$f" | awk '{print $1, $3}')
+		pw=$(cat "$f"); rm -f "$f"
+		[ "$1" = -rw------- ] && [ "$2" = 0 ] || { pw=''; return 1; }
+	else
+		pw=$MAKHZAN_PASSWORD
+	fi
+	return 0
+}
+secret_dir() {
+	[ -d "$SECRET_DIR" ] && [ ! -L "$SECRET_DIR" ] || mkdir -m 0700 -p "$SECRET_DIR"
+	chmod 0700 "$SECRET_DIR" 2>/dev/null
+	# One-time files are consumed immediately; anything older than a minute is abandoned.
+	find "$SECRET_DIR" -maxdepth 1 -type f -name 'secret.*' -mmin +1 -exec rm -f {} \; 2>/dev/null
 }
 valid_password() {
 	[ "$(printf '%s' "$1" | wc -c)" -ge 8 ] && [ "$(printf '%s' "$1" | wc -c)" -le 64 ] && no_cntrl "$1"
@@ -231,7 +255,8 @@ set_root() {
 	ok
 }
 add_user() {
-	u=$1; pw=$MAKHZAN_PASSWORD
+	u=$1
+	read_password "$2" || { fail 'Password transfer failed; try again'; return; }
 	valid_user "$u" || { fail 'Username must be 1-31 lowercase letters, numbers, _ or -, and not a reserved share name'; return; }
 	grep -q "^$u:" /etc/passwd && { fail 'This username already exists on the router'; return; }
 	valid_password "$pw" || { fail 'Password must be 8-64 characters without control characters'; return; }
@@ -249,7 +274,8 @@ add_user() {
 	ok
 }
 set_password() {
-	u=$1; pw=$MAKHZAN_PASSWORD
+	u=$1
+	read_password "$2" || { fail 'Password transfer failed; try again'; return; }
 	managed_user "$u" || { fail 'Unknown Makhzan user'; return; }
 	valid_password "$pw" || { fail 'Password must be 8-64 characters without control characters'; return; }
 	smb_required || return
@@ -372,6 +398,7 @@ uninstall() {
 	return 0
 }
 
+secret_dir
 case "$1" in
 	status|storage-devices|storage-plan|storage-job|list|boot) ;;
 	*) control_lock;;
@@ -385,8 +412,8 @@ case "$1" in
 	storage-job) /usr/libexec/makhzan-storage job;;
 	storage-release) /usr/libexec/makhzan-storage release "$2";;
 	root) set_root "$2";;
-	add-user) add_user "$2";;
-	passwd) set_password "$2";;
+	add-user) add_user "$2" "$3";;
+	passwd) set_password "$2" "$3";;
 	unlock) unlock_user "$2";;
 	del-user) del_user "$2";;
 	list) list_folders "$2";;

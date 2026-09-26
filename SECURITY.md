@@ -21,9 +21,13 @@ This document is not a certification.
   `^[a-z][a-z0-9_-]{0,30}$`; folder names reject `/ \ : * ? " < > |`, control
   bytes, `.`/`..`, trailing dots/spaces and names over 255 bytes. Existing system
   accounts are never adopted or modified.
-- **Passwords** travel in the `MAKHZAN_PASSWORD` environment variable of the
-  exec call (readable only by root), are piped to `smbpasswd -s`, and never
-  appear in argv, logs or files written by Makhzan.
+- **Passwords** never appear in argv or logs. rpcd refuses exec environments
+  for sessions, so the page writes a one-time file
+  `/tmp/run/makhzan/secret.<32 random hex>` (mode 0600, directory 0700 root;
+  the ACL allows writing only that pattern) and passes only the token. The
+  backend checks owner and mode, reads the file, deletes it at once and pipes
+  the password to `smbpasswd -s`. Unused files are purged after one minute.
+  Root shell users may use `MAKHZAN_PASSWORD` instead.
 - **Isolation:** each home is `ROOT/users/<name>`, owner the user, mode `0700`;
   `ROOT/users` is root `0711`. Each private SMB share has `valid users = <name>`
   and access-based share enumeration hides other users' shares. `Shared` is

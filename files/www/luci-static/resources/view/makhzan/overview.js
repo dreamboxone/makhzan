@@ -10,17 +10,17 @@
 'use strict';
 'require view';
 'require rpc';
+'require fs';
 'require ui';
 'require poll';
 
 var VERSION = '1.1.0';
 /* Replaced with VERSION-RELEASE at package build time; busts the browser cache for theme.css. */
 var BUILD = '@MAKHZAN_BUILD@';
-/* Passwords travel in the exec environment (root-only readable), never in argv. */
 var callExec = rpc.declare({ object: 'file', method: 'exec', params: [ 'command', 'params', 'env' ] });
 
-function call(args, env) {
-	return callExec('/usr/sbin/makhzanctl', args.map(String), env).then(function(r) {
+function call(args) {
+	return callExec('/usr/sbin/makhzanctl', args.map(String)).then(function(r) {
 		var out;
 		if (typeof r !== 'object' || r === null)
 			throw new Error('Access denied or backend unavailable (' + r + ')');
@@ -29,6 +29,18 @@ function call(args, env) {
 		if (out.ok === false)
 			throw new Error(out.error);
 		return out;
+	});
+}
+
+/* Passwords never go into argv: write a one-time 0600 file in the root-only /tmp/run/makhzan (/var/run is a symlink; rpcd checks canonical paths) and pass
+ * only its random token; the backend reads and deletes it at once. (rpcd refuses exec environments.) */
+function sendPassword(password) {
+	var bytes = new Uint8Array(16), token = '';
+	window.crypto.getRandomValues(bytes);
+	for (var i = 0; i < bytes.length; i++) token += ('0' + bytes[i].toString(16)).slice(-2);
+	return fs.write('/tmp/run/makhzan/secret.' + token, password, 384).then(function() { return token; }, function() {
+		/* rpcd grants ACLs at login: sessions opened before an install/upgrade lack the write permission. */
+		throw new Error('Could not hand over the password securely. Log out of LuCI and log in again (needed once after installing or upgrading Makhzan), then retry.');
 	});
 }
 
@@ -92,7 +104,9 @@ var FA_ERRORS = {
 	'Selected path is not an existing canonical mount point': 'این مسیر یک نقطهٔ mount معتبر نیست.',
 	'Only a mounted USB flash drive or USB hard disk with ext2/3/4, btrfs or xfs is allowed': 'فقط فلش یا هارد USB با فایل‌سیستم ext2/3/4، btrfs یا xfs مجاز است.',
 	'Username must be 1-31 lowercase letters, numbers, _ or -, and not a reserved share name': 'نام کاربری باید ۱ تا ۳۱ حرف کوچک انگلیسی، عدد، _ یا - باشد و نام رزرو‌شده نباشد.',
-	'This username already exists on the router': 'این نام کاربری روی روتر وجود دارد.',
+	'This username already exists on the router': 'این نام کاربری از قبل وجود دارد (روی روتر یا در مخزن). نام دیگری انتخاب کنید.',
+	'Password transfer failed; try again': 'انتقال امن رمز ناموفق بود؛ دوباره تلاش کنید.',
+	'Could not hand over the password securely. Log out of LuCI and log in again (needed once after installing or upgrading Makhzan), then retry.': 'رمز به‌صورت امن ارسال نشد. یک بار از LuCI خارج شوید (Log out) و دوباره وارد شوید، سپس دوباره امتحان کنید. این کار فقط یک بار بعد از نصب یا ارتقای مخزن لازم است.',
 	'Password must be 8-64 characters without control characters': 'رمز باید ۸ تا ۶۴ نویسه باشد.',
 	'samba4-server is not installed': 'بستهٔ samba4-server نصب نیست.',
 	'minidlna is not installed': 'بستهٔ minidlna نصب نیست.',
@@ -148,13 +162,25 @@ return view.extend({
 				E('h3', { 'class': 'mk-card-title' }, [ ico ? E('span', { 'class': 'mk-badge-ico' }, icon(ico)) : '', E('span', {}, title) ])
 			].concat(body));
 		}
-		function modal(title, body) { ui.showModal(title, [ E('div', { 'class': 'mk mk-modal', 'dir': fa ? 'rtl' : 'ltr' }, body) ]); }
+		/* Makhzan-styled dialog: our own title (RTL-aware, Vazirmatn) and colors that follow the page theme. */
+		function modal(title, body, ico) {
+			var dark = root.classList.contains('mk-dark');
+			ui.showModal('', [ E('div', { 'class': 'mk mk-modal' + (dark ? ' mk-dark' : ''), 'dir': fa ? 'rtl' : 'ltr' }, [
+				E('div', { 'class': 'mk-dialog-head' }, [ E('span', { 'class': 'mk-badge-ico' }, icon(ico || 'sparkle')), E('h3', {}, title) ])
+			].concat(body)) ], 'mk-dialog', dark ? 'mk-dark' : 'mk-light');
+		}
 		function field(label, input) { return E('label', { 'class': 'mk-field' }, [ E('span', {}, label), input ]); }
 		function actions(list) { return E('div', { 'class': 'mk-row mk-end' }, list); }
 
 		var root = E('div', { 'class': 'mk', 'dir': fa ? 'rtl' : 'ltr' });
 		root.appendChild(E('link', { 'rel': 'stylesheet', 'href': L.resource('view/makhzan/theme.css') + '?v=' + BUILD }));
-		try { if (localStorage.getItem('makhzan-theme') === 'dark') root.classList.add('mk-dark'); } catch (e) {}
+		/* Theme: the viewer's saved choice, otherwise follow the LuCI theme (dark page background => dark). */
+		var savedTheme = null;
+		try { savedTheme = localStorage.getItem('makhzan-theme'); } catch (e) {}
+		if (savedTheme ? savedTheme === 'dark' : (function() {
+			var m = getComputedStyle(document.body).backgroundColor.match(/\d+/g);
+			return m ? (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) < 128 : false;
+		})()) root.classList.add('mk-dark');
 
 		/* ---------- Hero (a div, not <header>: the LuCI theme styles every <header> as its sticky menu bar) ---------- */
 		var theme = btn(t('روشن / تیره', 'Light / Dark'), function() {
@@ -216,7 +242,7 @@ return view.extend({
 				}, 'success', 'folderPlus') ]),
 				msg,
 				actions([ btn(t('بستن', 'Close'), function() { ui.hideModal(); return refresh(); }, 'soft-violet', 'x') ])
-			]);
+			], 'folder');
 			return load();
 		}
 
@@ -235,8 +261,8 @@ return view.extend({
 			modal(t('تغییر رمز ', 'Change password: ') + user, p.fields.concat([ msg, actions([
 				btn(t('ذخیرهٔ رمز', 'Save password'), function() {
 					var err = p.check(); if (err) { msg.textContent = err; return; }
-					return call([ 'passwd', user ], { MAKHZAN_PASSWORD: p.a.value }).then(function() { ui.hideModal(); ui.addNotification(null, E('p', {}, t('رمز تغییر کرد.', 'Password changed.')), 'info'); return refresh(); }).catch(function(e) { msg.textContent = msgOf(e); });
-				}, 'warn', 'key'), btn(t('انصراف', 'Cancel'), ui.hideModal, 'soft-violet', 'x') ]) ]));
+					return sendPassword(p.a.value).then(function(token) { return call([ 'passwd', user, token ]); }).then(function() { ui.hideModal(); ui.addNotification(null, E('p', {}, t('رمز تغییر کرد.', 'Password changed.')), 'info'); return refresh(); }).catch(function(e) { msg.textContent = msgOf(e); });
+				}, 'warn', 'key'), btn(t('انصراف', 'Cancel'), ui.hideModal, 'soft-violet', 'x') ]) ]), 'key');
 			p.a.focus();
 		}
 		function deleteUser(user) {
@@ -248,7 +274,7 @@ return view.extend({
 					if (typed.value.trim() !== user) { msg.textContent = t('نام یکسان نیست.', 'Name does not match.'); return; }
 					return call([ 'del-user', user ]).then(function() { ui.hideModal(); return refresh(); }).catch(function(e) { msg.textContent = msgOf(e); });
 				}, 'danger', 'trash'), btn(t('انصراف', 'Cancel'), ui.hideModal, 'soft-violet', 'x') ])
-			]);
+			], 'trash');
 		}
 		function addUser() {
 			var name = E('input', { 'placeholder': 'ali', 'maxlength': '31', 'dir': 'ltr', 'autocomplete': 'off' }), p = passwordInputs(), msg = E('p', { 'class': 'mk-msg' });
@@ -257,10 +283,11 @@ return view.extend({
 				field(t('نام کاربری (حروف کوچک انگلیسی)', 'Username (lowercase)'), name) ].concat(p.fields, [ msg,
 				actions([ btn(t('ساخت کاربر', 'Create user'), function() {
 					if (!/^[a-z][a-z0-9_-]{0,30}$/.test(name.value)) { msg.textContent = t('نام کاربری باید با حرف کوچک انگلیسی شروع شود و فقط شامل حروف کوچک، عدد، _ یا - باشد.', 'Start with a lowercase letter; use only a-z, 0-9, _ or -.'); return; }
+					if (data.users.some(function(u) { return u.name === name.value; })) { msg.textContent = t('کاربر «' + name.value + '» از قبل وجود دارد. نام دیگری انتخاب کنید.', 'User "' + name.value + '" already exists. Choose another name.'); return; }
 					var err = p.check(); if (err) { msg.textContent = err; return; }
 					msg.textContent = t('در حال ساخت…', 'Creating…');
-					return call([ 'add-user', name.value ], { MAKHZAN_PASSWORD: p.a.value }).then(function() { ui.hideModal(); return refresh(); }).catch(function(e) { msg.textContent = msgOf(e); });
-				}, 'success', 'userPlus'), btn(t('انصراف', 'Cancel'), ui.hideModal, 'soft-violet', 'x') ]) ]));
+					return sendPassword(p.a.value).then(function(token) { return call([ 'add-user', name.value, token ]); }).then(function() { ui.hideModal(); return refresh(); }).catch(function(e) { msg.textContent = msgOf(e); });
+				}, 'success', 'userPlus'), btn(t('انصراف', 'Cancel'), ui.hideModal, 'soft-violet', 'x') ]) ]), 'userPlus');
 			name.focus();
 		}
 
@@ -413,7 +440,7 @@ return view.extend({
 				var typed = E('input', { 'placeholder': disk, 'dir': 'ltr', 'aria-label': t('تأیید نام دیسک', 'Confirm disk name') }), msg = E('p', { 'class': 'mk-msg' });
 				var w = plan.nas_space_warning ? { who: plan.nas_space_consumers, free: plan.unallocated_mib } : null;
 				modal(t('تأیید نهایی تقسیم حافظه', 'Confirm disk allocation'), [
-					alertBox('error', 'alert', t('تمام اطلاعات این دیسک پاک می‌شود: ', 'All data on this disk will be erased: ') + disk),
+					alertBox('error', 'alert', [ t('تمام اطلاعات این دیسک پاک می‌شود: ', 'All data on this disk will be erased: '), num(disk) ]),
 					E('div', { 'class': 'mk-plan', 'dir': 'ltr' }, roles.map(function(r, i) {
 						return E('div', { 'style': '--accent:' + r.color }, [ E('b', {}, [ 'extroot', 'swap', 'NAS' ][i]), E('span', {}, (r.check.checked ? r.input.value : '0') + ' MB') ]);
 					})),
@@ -427,7 +454,7 @@ return view.extend({
 							ui.hideModal(); lastJob = 'running'; return refresh();
 						}).catch(function(e) { msg.textContent = msgOf(e); });
 					}, 'danger', 'layers'), btn(t('انصراف', 'Cancel'), ui.hideModal, 'soft-violet', 'x') ])
-				]);
+				], 'layers');
 			});
 		}, 'primary', 'layers');
 		var planner = card(t('تقسیم فضای دیسک USB', 'USB disk allocation'), [

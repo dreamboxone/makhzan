@@ -22,9 +22,12 @@ minidlna 1.3.3, 16 GB USB flash drive. Client: Windows 11. Date: 2026-09-26.
 | SMB | Write to own share, Shared and Media; access to other user's share denied | Pass |
 | SMB | 4 wrong passwords → correct password refused (Windows error 1909) | Pass |
 | SMB | Admin unlock; password change | Pass |
+| Auth | Password handover under a restricted rpcd session: one-time 0600 file, deleted on use; forged token and writes outside the allowed path refused | Pass |
+| Auth | Creating an existing username reports "already exists" | Pass |
 | Folders | Unicode names, rename, trash; `..`, `../../etc`, `a:b`, newline names rejected | Pass |
 | Folders | Planted symlink not listed and not operable | Pass |
 | DLNA | Enable → minidlnad listening on 8200 with ROOT/media | Pass |
 | UI | LuCI menu no longer hidden behind the page; Vazirmatn on "فارسی" button | Pass |
 | UI | Switches render correctly under the Bootstrap theme's checkbox styles | Pass |
+| UI | Dialogs use Makhzan colors in light/dark, RTL title in Vazirmatn, LTR disk names | Pass |
 | UI | Persian/English, light/dark, phone width without horizontal scroll | Pass |

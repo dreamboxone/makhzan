@@ -64,7 +64,7 @@ Copyright © 2026 dreamboxone — منتشرشده با مجوز **GNU GPL نس�
 <div dir="ltr">
 
 ```sh
-scp -O luci-app-makhzan-1.1.0-r4.apk root@192.168.1.1:/tmp/
+scp -O luci-app-makhzan-1.1.0-r5.apk root@192.168.1.1:/tmp/
 ```
 
 </div>
@@ -78,7 +78,7 @@ scp -O luci-app-makhzan-1.1.0-r4.apk root@192.168.1.1:/tmp/
 ```sh
 apk update
 apk add kmod-usb-storage kmod-fs-ext4 samba4-server minidlna
-apk add --allow-untrusted /tmp/luci-app-makhzan-1.1.0-r4.apk
+apk add --allow-untrusted /tmp/luci-app-makhzan-1.1.0-r5.apk
 ```
 
 </div>
@@ -90,7 +90,7 @@ apk add --allow-untrusted /tmp/luci-app-makhzan-1.1.0-r4.apk
 ```sh
 opkg update
 opkg install kmod-usb-storage kmod-fs-ext4 samba4-server minidlna
-opkg install /tmp/luci-app-makhzan_1.1.0-r4_all.ipk
+opkg install /tmp/luci-app-makhzan_1.1.0-r5_all.ipk
 ```
 
 </div>
@@ -103,7 +103,7 @@ opkg install /tmp/luci-app-makhzan_1.1.0-r4_all.ipk
 
 صفحهٔ LuCI را یک بار تازه کنید و به منوی **Services ← Makhzan** بروید.
 
-> **ارتقا از نسخهٔ 1.0.0:** بعد از ارتقا فقط یک بار صفحه را با `Ctrl+F5` تازه کنید. از نسخهٔ 1.1.0 به بعد این کار لازم نیست.
+> **بعد از نصب یا ارتقا:** یک بار از LuCI خارج شوید (Log out) و دوباره وارد شوید تا مجوزهای جدید اعمال شود. هنگام ارتقا از نسخهٔ 1.0.0 صفحه را یک بار هم با `Ctrl+F5` تازه کنید.
 
 ## حذف برنامه
 
@@ -176,7 +176,7 @@ rm -f /etc/config/makhzan
 - هر کاربر فقط اشتراک خصوصی خودش را می‌بیند (اشتراک‌های دیگران در فهرست نمایش داده نمی‌شوند) و به پوشهٔ دیگران دسترسی ندارد (مجوز پوشه `0700`).
 - ورود مهمان غیرفعال است و Samba فقط روی شبکهٔ داخلی (LAN) کار می‌کند.
 - بعد از ۴ رمز اشتباه، حساب ۱۵ دقیقه قفل می‌شود (خطای 1909 در ویندوز).
-- رمزها هرگز در خط فرمان منتقل نمی‌شوند (از طریق متغیر محیطی که فقط root می‌خواند).
+- رمزها هرگز در خط فرمان منتقل نمی‌شوند؛ از طریق یک فایل یک‌بارمصرف که فقط root می‌خواند و بلافاصله پاک می‌شود.
 - ساخت پیوند نمادین (symlink) از طریق SMB غیرفعال است و عملیات پوشه‌ها پیوندها را دنبال نمی‌کنند.
 - فقط دیسک‌های فیزیکی USB پذیرفته می‌شوند؛ حافظهٔ داخلی روتر هرگز پارتیشن‌بندی یا به‌عنوان NAS استفاده نمی‌شود.
 - صفحهٔ مدیریت فقط برای مدیر روتر (root در LuCI) است.
@@ -281,18 +281,18 @@ Architecture independent (`PKGARCH:=all`): ARMv7, ARMv8/aarch64, ARMv9, x86-64 a
 ## Install
 
 ```sh
-scp -O luci-app-makhzan-1.1.0-r4.apk root@192.168.1.1:/tmp/
+scp -O luci-app-makhzan-1.1.0-r5.apk root@192.168.1.1:/tmp/
 
 # OpenWrt 25.12+
 apk update && apk add kmod-usb-storage kmod-fs-ext4 samba4-server minidlna
-apk add --allow-untrusted /tmp/luci-app-makhzan-1.1.0-r4.apk
+apk add --allow-untrusted /tmp/luci-app-makhzan-1.1.0-r5.apk
 
 # OpenWrt 24.10 and older
 opkg update && opkg install kmod-usb-storage kmod-fs-ext4 samba4-server minidlna
-opkg install /tmp/luci-app-makhzan_1.1.0-r4_all.ipk
+opkg install /tmp/luci-app-makhzan_1.1.0-r5_all.ipk
 ```
 
-Or upload the package in **System → Software**. Then open **Services → Makhzan**. When upgrading from 1.0.0, reload the page once with Ctrl+F5.
+Or upload the package in **System → Software**. Log out of LuCI and log in again once (rpcd grants the new permissions at login), then open **Services → Makhzan**. When upgrading from 1.0.0, also reload the page once with Ctrl+F5.
 
 ## Remove
 

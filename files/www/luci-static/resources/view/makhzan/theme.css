@@ -11,8 +11,8 @@
 .mk [lang=fa],.mk button.mk-btn[lang=fa],.mk button.mk-btn[lang=fa] *{font-family:Vazirmatn,Tahoma,sans-serif!important}
 .mk code,.mk code *{font-family:ui-monospace,Consolas,monospace!important}
 
-.mk{--bg:#f4f6fb;--panel:#fff;--text:#1b2540;--muted:#66728c;--line:#e3e8f2;--soft:#f6f8fd;--shadow:0 10px 30px -12px #1b2a5c26;
-	background:var(--bg);color:var(--text);padding:24px;border-radius:26px;max-width:1240px;margin:auto;font-family:"Segoe UI",Tahoma,Arial,sans-serif}
+.mk,.mk-dialog{--bg:#f4f6fb;--panel:#fff;--text:#1b2540;--muted:#66728c;--line:#e3e8f2;--soft:#f6f8fd;--shadow:0 10px 30px -12px #1b2a5c26}
+.mk{background:var(--bg);color:var(--text);padding:24px;border-radius:26px;max-width:1240px;margin:auto;font-family:"Segoe UI",Tahoma,Arial,sans-serif}
 .mk *{box-sizing:border-box}
 .mk h2,.mk h3{color:inherit;margin:0 0 14px}
 .mk p{line-height:1.9;margin:8px 0}
@@ -161,8 +161,14 @@
 .mk-stat{display:flex;align-items:center;gap:8px;font-size:15px;margin:8px 0 4px}
 .mk-stat .mk-ico{color:#ef4444}
 
+/* Dialogs: LuCI's .modal box gets Makhzan colors; LuCI's own <h4> title is replaced by .mk-dialog-head */
+#modal_overlay > .modal.mk-dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:22px;padding:22px 24px 14px;max-width:660px;box-shadow:0 30px 70px -25px #000c}
+#modal_overlay > .modal.mk-dialog > h4{display:none}
+.mk.mk-modal{background:transparent;padding:0;border-radius:0;max-width:none;color:var(--text)}
+.mk-dialog-head{--accent:#6366f1;display:flex;align-items:center;gap:12px;margin:0 0 8px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.mk-dialog-head h3{margin:0;font-size:20px;font-weight:800}
+.mk-modal .mk-field span{color:var(--text)}
 /* Folder manager (modal) */
-.mk.mk-modal{background:transparent;padding:0;border-radius:0;max-width:none}
 .mk-list{max-height:50vh;overflow:auto;margin:8px 0}
 .mk-folder{display:flex;gap:8px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:12px;padding:6px 10px;margin-bottom:8px}
 .mk-folder input{flex:1 1 180px}
