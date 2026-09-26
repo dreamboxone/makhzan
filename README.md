@@ -169,7 +169,9 @@ rm -f /etc/config/makhzan
 | **آیفون / آیپد** | برنامهٔ **Files** ← سه‌نقطه ← **Connect to Server** ← `smb://192.168.1.1` |
 | **مک** | Finder ← **Go ← Connect to Server** ← `smb://192.168.1.1` |
 | **لینوکس** | مدیر فایل ← `smb://192.168.1.1/ali` |
-| **تلویزیون** | اگر MiniDLNA روشن باشد، در بخش Media/DLNA تلویزیون دستگاهی با نام روتر می‌بینید. |
+| **تلویزیون** | اگر MiniDLNA روشن باشد، در بخش Media/DLNA تلویزیون دستگاهی با نام **Makhzan** می‌بینید. |
+
+> **نکتهٔ ویندوز:** ویندوز به هر سرور در هر لحظه فقط با **یک کاربر** وصل می‌شود. اگر یک بار با کاربری (مثلاً `ali2`) وارد شده باشید، برای پوشهٔ کاربر دیگر رمز نمی‌خواهد و پوشه باز نمی‌شود. راه‌حل: پنجره‌های File Explorer را ببندید و در CMD دستور `net use * /delete /y` را بزنید (یا یک بار از ویندوز خارج و دوباره وارد شوید). برای استفادهٔ هم‌زمان از دو کاربر، یکی را با آدرس IP (`\192.168.1.1\ali`) و دیگری را با نام روتر (`\OpenWrt.lan\ali2`) باز کنید.
 
 ## امنیت
 
@@ -305,6 +307,8 @@ opkg remove luci-app-makhzan    # OpenWrt 24.10 and older
 Removal deletes Makhzan's SMB shares, removes the access-based-enumeration and unix-extensions lines from the Samba template (the Samba password database stays on `tdbsam` so no password is lost) and disables MiniDLNA if Makhzan enabled it. Your files, user accounts with their passwords and the fstab mount entries are kept on purpose; reinstalling restores everything automatically. Note: `apk del` also removes dependencies that were installed with Makhzan (such as `block-mount`), which cleanly unmounts the USB disk; run `apk add block-mount e2fsprogs` first if the disk should stay mounted. See the Persian section for optional full-cleanup commands.
 
 ## Quick start
+
+Windows connects to a server as only one user at a time: after logging in as one user, it will not ask again and another user's private folder will not open. Close File Explorer and run `net use * /delete /y` (or sign out of Windows) to switch users, or use the IP address for one user and the router name (`\OpenWrt.lan\user`) for another.
 
 1. Plug in the USB disk. 2. In **USB disk allocation**, select the disk (press **Release disk** if it is in use), enable **File server · NAS**, press **Use all remaining**, then **Review plan** → type the disk name → **Erase and create** (this erases the disk; use **Existing storage** instead to keep an ext4 disk's files). 3. Turn on **SMB**. 4. **Add user**. 5. Connect with `\\ROUTER\username`, `\\ROUTER\Shared`, `\\ROUTER\Media` (Windows) or `smb://ROUTER` (macOS, iOS, Linux, Android apps).
 
