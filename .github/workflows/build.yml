@@ -64,11 +64,13 @@ jobs:
       matrix:
         include:
           - { format: apk, arch: x86-64,                 platform: linux/amd64,  image: x86-64 }
-          - { format: apk, arch: ARMv8/ARMv9 (aarch64),  platform: linux/arm64,  image: armsr-armv8 }
-          - { format: apk, arch: ARMv7,                  platform: linux/arm/v7, image: armsr-armv7 }
+          - { format: apk, arch: ARMv8/ARMv9 (aarch64),  platform: linux/aarch64_generic, image: armsr-armv8 }
+          - { format: apk, arch: ARMv7,                  platform: linux/arm_cortex-a15_neon-vfpv4, image: armsr-armv7 }
           - { format: ipk, arch: x86-64,                 platform: linux/amd64,  image: x86-64 }
-          - { format: ipk, arch: ARMv8/ARMv9 (aarch64),  platform: linux/arm64,  image: armsr-armv8 }
-          - { format: ipk, arch: ARMv7,                  platform: linux/arm/v7, image: armsr-armv7 }
+          - { format: ipk, arch: ARMv8/ARMv9 (aarch64),  platform: linux/aarch64_generic, image: armsr-armv8 }
+          - { format: ipk, arch: ARMv7,                  platform: linux/arm_cortex-a15_neon-vfpv4, image: armsr-armv7 }
+    # OpenWrt labels its images with OpenWrt architectures (aarch64_generic, arm_cortex-a15_neon-vfpv4)
+    # instead of Docker's arm64/arm/v7, so the exact label is requested; QEMU runs them by binary format.
     steps:
       - uses: actions/checkout@v4
 
