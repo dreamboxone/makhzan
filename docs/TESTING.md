@@ -15,6 +15,9 @@ minidlna 1.3.3, 16 GB USB flash drive. Client: Windows 11. Date: 2026-09-26.
 | Package | ipk built with 24.10 SDK: `Architecture: all`, install/remove hooks present | Pass (not installed: no 24.10 device) |
 | Storage | Plan and erase-apply swap 256 MiB + NAS 8000 MiB; fstab entries, mount, swap | Pass |
 | Storage | Wrong erase token rejected | Pass |
+| Storage | From the LuCI page: release disk, then erase-apply NAS-only plan as a detached job with progress | Pass |
+| Storage | Stale swap signature auto-activated by hotplug on the new partition is released before formatting | Pass |
+| Storage | After re-partitioning: empty private homes recreated (0700), shares restored, MiniDLNA restarted on the new disk | Pass |
 | Storage | NAS space warning for extroot/swap only plans; no warning with NAS or ≥ 1 GiB left | Pass |
 | Storage | Select existing mount; folder layout and permissions | Pass |
 | Users | Create (password policy, reserved names, duplicates), delete (home to trash) | Pass |
