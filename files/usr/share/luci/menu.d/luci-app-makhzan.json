@@ -1,0 +1,9 @@
+{
+  "admin/services/makhzan": {
+    "title": "Makhzan",
+    "order": 65,
+    "action": { "type": "view", "path": "makhzan/overview" },
+    "depends": { "acl": [ "luci-app-makhzan" ] }
+  }
+}
+

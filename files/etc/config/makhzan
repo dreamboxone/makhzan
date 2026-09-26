@@ -1,0 +1,13 @@
+# Makhzan - USB NAS manager for OpenWrt
+# Copyright (C) 2026 dreamboxone
+# SPDX-License-Identifier: GPL-3.0-only
+#
+# This program is free software: you can redistribute it and/or modify it under the terms
+# of the GNU General Public License version 3 as published by the Free Software Foundation.
+# It is distributed WITHOUT ANY WARRANTY; see the LICENSE file for details.
+config makhzan 'main'
+	option enabled '0'
+	option root '/mnt/makhzan'
+	option language 'fa'
+	option samba '0'
+	option dlna '0'

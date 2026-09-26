@@ -1,0 +1,402 @@
+#!/bin/sh
+# Makhzan - USB NAS manager for OpenWrt
+# Copyright (C) 2026 dreamboxone
+# SPDX-License-Identifier: GPL-3.0-only
+#
+# This program is free software: you can redistribute it and/or modify it under the terms
+# of the GNU General Public License version 3 as published by the Free Software Foundation.
+# It is distributed WITHOUT ANY WARRANTY; see the LICENSE file for details.
+# Makhzan NAS control plane. Input is intentionally narrow: UI text is never evaluated by a shell.
+# Passwords arrive only in the MAKHZAN_PASSWORD environment variable, never on the command line.
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+umask 077
+. /usr/libexec/makhzan-usb.sh || exit 1
+
+VERSION=1.1.0
+SMB_TEMPLATE=/etc/samba/smb.conf.template
+CONTROL_LOCK=/var/lock/makhzan-control.lock
+RESERVED='shared media homes global printers print$ ipc$ root admin'
+
+quote() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/[[:cntrl:]]/ /g'; }
+ok() { printf '{"ok":true%s}\n' "$1"; }
+fail() { printf '{"ok":false,"error":"%s"}\n' "$(quote "$1")"; return 1; }
+bool() { [ "$1" = 1 ] && echo true || echo false; }
+# BusyBox tr on OpenWrt has no character classes; match raw control bytes instead (UTF-8 text passes).
+no_cntrl() {
+	[ "$(printf '%s' "$1" | wc -l)" -eq 0 ] || return 1
+	! printf '%s' "$1" | grep -q "$(printf '[\001-\037\177]')"
+}
+valid_user() {
+	printf '%s' "$1" | grep -Eq '^[a-z][a-z0-9_-]{0,30}$' && [ "$(printf '%s' "$1" | wc -l)" -eq 0 ] || return 1
+	for word in $RESERVED; do [ "$1" != "$word" ] || return 1; done
+}
+# One folder name: no path separators, no Windows-reserved characters, no control characters, at most 255 bytes.
+valid_name() {
+	[ -n "$1" ] && [ "$(printf '%s' "$1" | wc -c)" -le 255 ] || return 1
+	case "$1" in *[/\\:*?\"\<\>\|]*|' '*|*' '|*.) return 1;; esac
+	no_cntrl "$1"
+}
+valid_password() {
+	[ "$(printf '%s' "$1" | wc -c)" -ge 8 ] && [ "$(printf '%s' "$1" | wc -c)" -le 64 ] && no_cntrl "$1"
+}
+
+control_lock() {
+	if ! mkdir "$CONTROL_LOCK" 2>/dev/null; then
+		holder=$(cat "$CONTROL_LOCK/pid" 2>/dev/null)
+		if [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; then fail 'Another operation is running; wait until it completes'; exit 1; fi
+		rm -rf "$CONTROL_LOCK"; mkdir "$CONTROL_LOCK" 2>/dev/null || { fail 'Another operation is running; wait until it completes'; exit 1; }
+	fi
+	echo $$ > "$CONTROL_LOCK/pid"
+	trap 'rm -rf "$CONTROL_LOCK"' EXIT
+}
+
+root() { uci -q get makhzan.main.root; }
+valid_root() {
+	r=$(root)
+	case "$r" in /mnt/*|/srv/*) ;; *) return 1;; esac
+	[ "$(readlink -f "$r")" = "$r" ] && [ -d "$r" ] && [ ! -L "$r" ] && makhzan_mounted "$r" || return 1
+	makhzan_usb_mount "$r"
+}
+# The NAS partition may be unmounted (hot-plug timing, or block-mount being reinstalled); mount it from fstab.
+root_remount() {
+	valid_root && return 0
+	[ "$(uci -q get fstab.makhzan_nas.enabled)" = 1 ] && [ "$(uci -q get fstab.makhzan_nas.target)" = "$(root)" ] || return 1
+	command -v block >/dev/null && block mount >/dev/null 2>&1
+	valid_root
+}
+ensure_layout() {
+	root_remount || { fail 'USB storage is not ready: select a mounted USB ext4 disk'; return 1; }
+	makhzan_layout "$(root)" || { fail 'Unsafe storage layout'; return 1; }
+}
+
+# ---- Accounts: Makhzan-managed accounts have GECOS "makhzan", uid >= 1000 and shell /bin/false ----
+managed_user() { awk -F: -v u="$1" '$1==u && $3>=1000 && $5=="makhzan" && $7=="/bin/false" {f=1} END {exit !f}' /etc/passwd; }
+user_uid() { awk -F: -v u="$1" '$1==u {print $3; exit}' /etc/passwd; }
+managed_users() { awk -F: '$3>=1000 && $5=="makhzan" && $7=="/bin/false" {print $1}' /etc/passwd; }
+account_create() {
+	gid=$(awk -F: '$1=="makhzan" {print $3; exit}' /etc/group); [ -n "$gid" ] || return 1
+	lock /var/lock/passwd
+	uid=$(awk -F: '{u[$3]=1} END {for (i=1000; i<30000; i++) if (!(i in u)) {print i; exit}}' /etc/passwd)
+	rc=1
+	if [ -n "$uid" ]; then
+		echo "$1:x:$uid:$gid:makhzan:/var/empty:/bin/false" >> /etc/passwd && rc=0
+		[ ! -f /etc/shadow ] || echo "$1:!:0:0:99999:7:::" >> /etc/shadow || rc=1
+	fi
+	lock -u /var/lock/passwd
+	return $rc
+}
+account_remove() {
+	managed_user "$1" || return 1
+	lock /var/lock/passwd
+	sed -i "/^$1:/d" /etc/passwd; [ ! -f /etc/shadow ] || sed -i "/^$1:/d" /etc/shadow
+	lock -u /var/lock/passwd
+}
+home_of() { echo "$(root)/users/$1"; }
+# The home must be a real directory on the NAS, owned by the user and private (mode 0700).
+valid_home() {
+	h=$(home_of "$1"); makhzan_same_fs "$(root)" "$h" || return 1
+	set -- $(makhzan_owner_mode "$h") "$(user_uid "$1")"
+	[ "$1" = drwx------ ] && [ "$2" = "$3" ]
+}
+
+# ---- Samba ----
+smb_installed() { command -v smbd >/dev/null && command -v smbpasswd >/dev/null && command -v pdbedit >/dev/null && [ -f /etc/config/samba4 ]; }
+# Samba settings Makhzan needs, appended to the [global] template as marked lines (the last value wins):
+# tdbsam stores bad-password counters (lockout), access-based enumeration hides other users' private shares,
+# and disabling SMB1 unix extensions prevents clients from creating symlinks.
+SMB_SETTINGS='passdb backend = tdbsam|access based share enum = yes|unix extensions = no'
+smb_template_on() {
+	[ -f "$SMB_TEMPLATE" ] || return 1
+	changed=0
+	IFS='|'; set -- $SMB_SETTINGS; unset IFS
+	for setting in "$@"; do
+		grep -q "^[[:space:]]*$setting[[:space:]]*\$" "$SMB_TEMPLATE" && continue
+		case "$setting" in passdb*)
+			# Carry existing smbpasswd accounts over; tdbsam keeps them from now on.
+			pdbedit -i smbpasswd:/etc/samba/smbpasswd -e tdbsam:/etc/samba/passdb.tdb >/dev/null 2>&1;;
+		esac
+		printf '\t## makhzan-managed\n\t%s\n' "$setting" >> "$SMB_TEMPLATE" || return 1
+		changed=1
+	done
+	# Regenerate smb.conf now so smbpasswd/pdbedit use tdbsam immediately.
+	[ "$changed" = 0 ] || smb_restart
+}
+# On removal, drop the share-visibility settings but keep tdbsam: accounts created under tdbsam cannot be
+# exported back to the smbpasswd format, so reverting would lose NAS users' passwords.
+smb_template_off() {
+	[ -f "$SMB_TEMPLATE" ] || return 0
+	awk '
+		/## makhzan-managed/ { marker=$0; next }
+		marker != "" { if ($0 ~ /passdb backend = tdbsam/) { print marker; print } marker=""; next }
+		{ print }
+	' "$SMB_TEMPLATE" > "$SMB_TEMPLATE.makhzan" && mv -f "$SMB_TEMPLATE.makhzan" "$SMB_TEMPLATE"
+}
+# Four failed SMB logins lock an account for 15 minutes. Samba keeps the policy in RAM, so it is re-applied at boot.
+smb_policy() {
+	pdbedit -P 'bad lockout attempt' -C 4 >/dev/null 2>&1 &&
+	pdbedit -P 'lockout duration' -C 15 >/dev/null 2>&1 &&
+	pdbedit -P 'reset count minutes' -C 15 >/dev/null 2>&1
+}
+smb_share() {
+	s=$(uci add samba4 sambashare) || return 1
+	uci set "samba4.$s.makhzan=1"; uci set "samba4.$s.name=$1"; uci set "samba4.$s.path=$2"; uci set "samba4.$s.users=$3"
+	uci set "samba4.$s.create_mask=$4"; uci set "samba4.$s.dir_mask=$5"
+	uci set "samba4.$s.read_only=no"; uci set "samba4.$s.guest_ok=no"; uci set "samba4.$s.browseable=yes"; uci set "samba4.$s.inherit_owner=no"
+}
+smb_clear() {
+	uci -q delete samba4.makhzan_shared
+	i=$(uci -q show samba4 | grep -c '=sambashare$')
+	while [ "$i" -gt 0 ]; do
+		i=$((i - 1)); [ "$(uci -q get "samba4.@sambashare[$i].makhzan")" != 1 ] || uci -q delete "samba4.@sambashare[$i]"
+	done
+}
+smb_restart() {
+	/etc/init.d/samba4 enable >/dev/null 2>&1
+	/etc/init.d/samba4 restart >/dev/null 2>&1 || return 1
+	[ -e /etc/samba/smb.conf ] || return 1
+	tries=0; while [ "$tries" -lt 10 ] && ! pidof smbd >/dev/null; do sleep 1; tries=$((tries + 1)); done
+	smb_policy
+}
+smb_sync() {
+	smb_installed || return 0
+	had=$(uci -q show samba4 | grep -c '\.makhzan=.1.$')
+	smb_clear
+	if [ "$(uci -q get makhzan.main.samba)" = 1 ] && valid_root; then
+		smb_template_on || return 1
+		r=$(root)
+		smb_share Shared "$r/shared" @makhzan 0660 0770
+		smb_share Media "$r/media" @makhzan 0664 0775
+		for u in $(managed_users); do valid_home "$u" && smb_share "$u" "$(home_of "$u")" "$u" 0600 0700; done
+		uci commit samba4 || return 1
+		smb_restart
+	else
+		# SMB disabled in Makhzan: remove our shares but never enable a Samba service the administrator disabled.
+		uci commit samba4 || return 1
+		[ "$had" -eq 0 ] || ! pidof smbd >/dev/null || /etc/init.d/samba4 restart >/dev/null 2>&1
+		return 0
+	fi
+}
+smb_required() {
+	smb_installed || { fail 'samba4-server is not installed'; return 1; }
+	[ "$(uci -q get makhzan.main.samba)" = 1 ] || { fail 'Enable SMB and apply service settings first'; return 1; }
+	smb_template_on || { fail 'Samba template could not be prepared'; return 1; }
+}
+smb_flags() { pdbedit -L -w 2>/dev/null | awk -F: -v u="$1" '$1==u {print $5; exit}'; }
+smb_password() { printf '%s\n%s\n' "$2" "$2" | smbpasswd -s $3 "$1" >/dev/null 2>&1; }
+
+# ---- Status ----
+status() {
+	language=$(uci -q get makhzan.main.language); [ "$language" = en ] || language=fa
+	reboot=false; extroot=false; pending_uuid=$(uci -q get makhzan.main.storage_extroot_uuid)
+	overlay_src=$(awk '$2=="/overlay" {print $1; exit}' /proc/mounts)
+	active_uuid=$([ -n "$overlay_src" ] && block info "$overlay_src" 2>/dev/null | sed -n 's/.* UUID="\([^"]*\)".*/\1/p')
+	if [ -n "$pending_uuid" ]; then
+		if [ "$active_uuid" = "$pending_uuid" ]; then extroot=true
+		elif [ "$(uci -q get fstab.makhzan_extroot.enabled)" = 1 ]; then reboot=true; fi
+	fi
+	r=$(root); disk=null; ready=false; users=''; trash=0
+	if valid_root; then
+		ready=true
+		set -- $(df -Pk "$r" 2>/dev/null | awk 'NR==2 {print $2, $3, $4}')
+		fs=$(awk -v m="$r" '$2==m {print $3; exit}' /proc/mounts)
+		disk=$(printf '{"root":"%s","filesystem":"%s","total_kib":%s,"used_kib":%s,"available_kib":%s}' "$(quote "$r")" "$(quote "$fs")" "${1:-0}" "${2:-0}" "${3:-0}")
+		[ ! -d "$r/.makhzan-trash" ] || trash=$(du -sk "$r/.makhzan-trash" 2>/dev/null | awk '{print $1}')
+	fi
+	smb_users=''; smb_installed && smb_users=$(pdbedit -L -w 2>/dev/null | awk -F: '{print $1 ":" $5}')
+	for u in $(managed_users); do
+		used=0; home=false
+		if [ "$ready" = true ] && valid_home "$u"; then home=true; used=$(du -sk "$(home_of "$u")" 2>/dev/null | awk '{print $1}'); fi
+		flags=$(printf '%s\n' "$smb_users" | awk -F: -v u="$u" '$1==u {print $2; exit}')
+		smb=false; locked=false; [ -z "$flags" ] || smb=true
+		case "$flags" in *L*) locked=true;; esac
+		users="$users${users:+,}{\"name\":\"$(quote "$u")\",\"home\":$home,\"used_kib\":${used:-0},\"smb\":$smb,\"locked\":$locked}"
+	done
+	smbd_running=false; pidof smbd >/dev/null && smbd_running=true
+	dlna_running=false; pidof minidlnad >/dev/null && dlna_running=true
+	job=$(/usr/libexec/makhzan-storage job)
+	printf '{"version":"%s","language":"%s","reboot_required":%s,"extroot_active":%s,"ready":%s,"disk":%s,"trash_kib":%s,"users":[%s],"job":%s,"services":{"samba_installed":%s,"minidlna_installed":%s,"samba_enabled":%s,"dlna_enabled":%s,"samba_running":%s,"dlna_running":%s}}\n' \
+		"$VERSION" "$language" "$reboot" "$extroot" "$ready" "$disk" "${trash:-0}" "$users" "$job" \
+		"$(smb_installed && echo true || echo false)" "$(command -v minidlnad >/dev/null && echo true || echo false)" \
+		"$(bool "$(uci -q get makhzan.main.samba)")" "$(bool "$(uci -q get makhzan.main.dlna)")" "$smbd_running" "$dlna_running"
+}
+
+# ---- Commands ----
+set_root() {
+	p=$1; case "$p" in /mnt/*|/srv/*) ;; *) fail 'Storage root must be below /mnt or /srv'; return;; esac
+	[ "$(readlink -f "$p")" = "$p" ] && [ -d "$p" ] && [ ! -L "$p" ] && makhzan_mounted "$p" || { fail 'Selected path is not an existing canonical mount point'; return; }
+	makhzan_usb_mount "$p" || { fail 'Only a mounted USB flash drive or USB hard disk with ext2/3/4, btrfs or xfs is allowed'; return; }
+	uci set makhzan.main.root="$p"; uci commit makhzan
+	ensure_layout || return
+	smb_sync || { fail 'Samba configuration or restart failed'; return; }
+	ok
+}
+add_user() {
+	u=$1; pw=$MAKHZAN_PASSWORD
+	valid_user "$u" || { fail 'Username must be 1-31 lowercase letters, numbers, _ or -, and not a reserved share name'; return; }
+	grep -q "^$u:" /etc/passwd && { fail 'This username already exists on the router'; return; }
+	valid_password "$pw" || { fail 'Password must be 8-64 characters without control characters'; return; }
+	ensure_layout || return
+	smb_required || return
+	account_create "$u" || { fail 'Unable to create local account'; return; }
+	h=$(home_of "$u")
+	if [ -e "$h" ] || [ -L "$h" ] || ! mkdir -m 0700 "$h" || ! chown -h "$u:makhzan" "$h"; then
+		account_remove "$u"; fail 'Unable to create the private folder (a folder with this name may already exist)'; return
+	fi
+	if ! smb_password "$u" "$pw" -a; then
+		rmdir "$h" 2>/dev/null; account_remove "$u"; fail 'Samba password could not be set'; return
+	fi
+	smb_sync || { fail 'User created, but Samba restart failed'; return; }
+	ok
+}
+set_password() {
+	u=$1; pw=$MAKHZAN_PASSWORD
+	managed_user "$u" || { fail 'Unknown Makhzan user'; return; }
+	valid_password "$pw" || { fail 'Password must be 8-64 characters without control characters'; return; }
+	smb_required || return
+	if [ -n "$(smb_flags "$u")" ]; then smb_password "$u" "$pw" || { fail 'Samba password could not be changed'; return; }
+	else smb_password "$u" "$pw" -a || { fail 'Samba password could not be set'; return; }; fi
+	unlock_user "$u" >/dev/null
+	ok
+}
+unlock_user() {
+	u=$1; managed_user "$u" || { fail 'Unknown Makhzan user'; return; }
+	smb_required || return
+	pdbedit -u "$u" -z >/dev/null 2>&1
+	flags=$(smb_flags "$u")
+	# pdbedit -c sets exactly the given [NDHLX] flags; resend the current ones without L.
+	case "$flags" in *L*) pdbedit -r -u "$u" -c "[$(printf '%s' "$flags" | sed 's/[^NDHX]//g')]" >/dev/null 2>&1;; esac
+	case "$(smb_flags "$u")" in *L*) fail 'Account could not be unlocked'; return;; esac
+	ok
+}
+del_user() {
+	u=$1; managed_user "$u" || { fail 'Unknown Makhzan user'; return; }
+	ensure_layout || return
+	r=$(root); h=$(home_of "$u")
+	if [ -e "$h" ] || [ -L "$h" ]; then
+		makhzan_same_fs "$r" "$h" || { fail 'Private folder is not a regular NAS folder'; return; }
+		mkdir -p -m 0700 "$r/.makhzan-trash/$u" && makhzan_same_fs "$r" "$r/.makhzan-trash/$u" || { fail 'Recovery trash is unavailable'; return; }
+		mv -n -T "$h" "$r/.makhzan-trash/$u/home.$(date +%Y%m%d-%H%M%S).$$" || { fail 'Private folder could not be moved to recovery trash'; return; }
+	fi
+	smb_installed && smbpasswd -x "$u" >/dev/null 2>&1
+	account_remove "$u" || { fail 'Account could not be removed'; return; }
+	smb_sync || { fail 'User removed, but Samba restart failed'; return; }
+	ok
+}
+folder_prepare() {
+	valid_root || { fail 'USB storage is not ready'; return 1; }
+	managed_user "$1" || { fail 'Unknown Makhzan user'; return 1; }
+	valid_home "$1" || { fail 'Private folder is missing or unsafe'; return 1; }
+	h=$(home_of "$1")
+}
+list_folders() {
+	folder_prepare "$1" || return
+	out=''
+	for d in "$h"/* "$h"/.[!.]* "$h"/..?*; do
+		[ -d "$d" ] && [ ! -L "$d" ] || continue
+		n=${d##*/}; no_cntrl "$n" || continue
+		out="$out${out:+,}\"$(quote "$n")\""
+	done
+	ok ",\"folders\":[$out]"
+}
+make_folder() {
+	folder_prepare "$1" || return
+	valid_name "$2" || { fail 'Invalid folder name'; return; }
+	[ ! -e "$h/$2" ] && [ ! -L "$h/$2" ] || { fail 'A file or folder with this name already exists'; return; }
+	mkdir -m 0700 "$h/$2" && chown -h "$1:makhzan" "$h/$2" || { fail 'Folder could not be created'; return; }
+	ok
+}
+rename_folder() {
+	folder_prepare "$1" || return
+	valid_name "$2" && valid_name "$3" || { fail 'Invalid folder name'; return; }
+	[ -d "$h/$2" ] && [ ! -L "$h/$2" ] || { fail 'Folder not found'; return; }
+	[ ! -e "$h/$3" ] && [ ! -L "$h/$3" ] || { fail 'A file or folder with the new name already exists'; return; }
+	mv -n -T "$h/$2" "$h/$3" && [ -d "$h/$3" ] && [ ! -e "$h/$2" ] || { fail 'Folder could not be renamed'; return; }
+	ok
+}
+trash_folder() {
+	folder_prepare "$1" || return
+	valid_name "$2" || { fail 'Invalid folder name'; return; }
+	[ -d "$h/$2" ] && [ ! -L "$h/$2" ] || { fail 'Folder not found'; return; }
+	r=$(root); t="$r/.makhzan-trash/$1"
+	mkdir -p -m 0700 "$t" && makhzan_same_fs "$r" "$t" || { fail 'Recovery trash is unavailable'; return; }
+	mv -n -T "$h/$2" "$t/$2.$(date +%Y%m%d-%H%M%S).$$" || { fail 'Folder could not be moved to trash'; return; }
+	ok
+}
+empty_trash() {
+	ensure_layout || return
+	t="$(root)/.makhzan-trash"
+	for d in "$t"/* "$t"/.[!.]* "$t"/..?*; do [ -e "$d" ] || [ -L "$d" ] || continue; rm -rf "$d" || { fail 'Trash could not be emptied'; return; }; done
+	ok
+}
+option_set() {
+	case "$1:$2" in samba:0|samba:1|dlna:0|dlna:1) ;; *) fail 'Invalid option'; return;; esac
+	uci set "makhzan.main.$1=$2"; uci commit makhzan; ok
+}
+apply() {
+	samba=$(uci -q get makhzan.main.samba); dlna=$(uci -q get makhzan.main.dlna)
+	[ "$samba" != 1 ] || smb_installed || { fail 'samba4-server is not installed'; return 1; }
+	[ "$dlna" != 1 ] || command -v minidlnad >/dev/null || { fail 'minidlna is not installed'; return 1; }
+	ensure_layout || return 1
+	r=$(root)
+	smb_sync || { fail 'Samba configuration or restart failed'; return 1; }
+	if [ "$dlna" = 1 ]; then
+		uci -q get minidlna.config >/dev/null || { fail 'Unsupported MiniDLNA configuration'; return 1; }
+		uci -q delete minidlna.config.media_dir
+		uci add_list minidlna.config.media_dir="$r/media"; uci set minidlna.config.enabled=1
+		uci -q get minidlna.config.interface >/dev/null || uci set minidlna.config.interface=br-lan
+		uci commit minidlna && /etc/init.d/minidlna enable && /etc/init.d/minidlna restart >/dev/null 2>&1 || { fail 'MiniDLNA configuration or restart failed'; return 1; }
+	elif command -v minidlnad >/dev/null && uci -q get minidlna.config >/dev/null; then
+		case "$(uci -q get minidlna.config.media_dir)" in "$r/media")
+			uci set minidlna.config.enabled=0; uci commit minidlna; /etc/init.d/minidlna stop >/dev/null 2>&1;;
+		esac
+	fi
+	uci set makhzan.main.enabled=1; uci commit makhzan
+	ok
+}
+boot() {
+	[ "$(uci -q get makhzan.main.enabled)" = 1 ] || return 0
+	if smb_installed && grep -q '## makhzan-managed' "$SMB_TEMPLATE" 2>/dev/null; then
+		tries=0; while [ "$tries" -lt 30 ] && ! pidof smbd >/dev/null; do sleep 2; tries=$((tries + 1)); done
+		smb_policy || logger -t makhzan 'Samba lockout policy could not be applied'
+	fi
+	# USB disks can appear after init; wait up to a minute for the NAS mount before refreshing shares.
+	tries=0; while [ "$tries" -lt 30 ] && ! root_remount; do sleep 2; tries=$((tries + 1)); done
+	valid_root && /usr/sbin/makhzanctl apply >/dev/null || logger -t makhzan 'USB storage not ready at boot; shares will be refreshed on next apply'
+}
+uninstall() {
+	smb_installed && { smb_clear; uci commit samba4; smb_template_off; /etc/init.d/samba4 restart >/dev/null 2>&1; }
+	r=$(root)
+	if [ -n "$r" ] && uci -q get minidlna.config >/dev/null && [ "$(uci -q get minidlna.config.media_dir)" = "$r/media" ]; then
+		uci set minidlna.config.enabled=0; uci commit minidlna; /etc/init.d/minidlna stop >/dev/null 2>&1
+	fi
+	return 0
+}
+
+case "$1" in
+	status|storage-devices|storage-plan|storage-job|list|boot) ;;
+	*) control_lock;;
+esac
+case "$1" in
+	status) status;;
+	language) case "$2" in fa|en) uci set makhzan.main.language="$2"; uci commit makhzan; ok;; *) fail 'Invalid language';; esac;;
+	storage-devices) /usr/libexec/makhzan-storage devices;;
+	storage-plan) /usr/libexec/makhzan-storage plan "$2" "$3" "$4" "$5";;
+	storage-apply) /usr/libexec/makhzan-storage apply "$2" "$3" "$4" "$5" "$6";;
+	storage-job) /usr/libexec/makhzan-storage job;;
+	storage-release) /usr/libexec/makhzan-storage release "$2";;
+	root) set_root "$2";;
+	add-user) add_user "$2";;
+	passwd) set_password "$2";;
+	unlock) unlock_user "$2";;
+	del-user) del_user "$2";;
+	list) list_folders "$2";;
+	mkdir) make_folder "$2" "$3";;
+	rename) rename_folder "$2" "$3" "$4";;
+	trash) trash_folder "$2" "$3";;
+	trash-empty) empty_trash;;
+	option) option_set "$2" "$3";;
+	apply) apply;;
+	boot) boot;;
+	uninstall) uninstall;;
+	*) fail 'Unknown command'; exit 2;;
+esac

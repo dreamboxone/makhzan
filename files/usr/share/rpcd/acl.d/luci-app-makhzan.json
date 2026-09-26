@@ -1,0 +1,10 @@
+{
+  "luci-app-makhzan": {
+    "description": "Makhzan NAS management; Copyright (C) 2026 dreamboxone; GPL-3.0-only",
+    "read": { "ubus": { "file": [ "exec" ] }, "file": { "/usr/sbin/makhzanctl status": [ "exec" ] } },
+    "write": {
+      "ubus": { "file": [ "exec" ] },
+      "file": { "/usr/sbin/makhzanctl": [ "exec" ] }
+    }
+  }
+}

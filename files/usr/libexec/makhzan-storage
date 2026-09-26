@@ -1,0 +1,206 @@
+#!/bin/sh
+# Makhzan - USB NAS manager for OpenWrt
+# Copyright (C) 2026 dreamboxone
+# SPDX-License-Identifier: GPL-3.0-only
+#
+# This program is free software: you can redistribute it and/or modify it under the terms
+# of the GNU General Public License version 3 as published by the Free Software Foundation.
+# It is distributed WITHOUT ANY WARRANTY; see the LICENSE file for details.
+# Whole-disk USB planner. Long operations run detached because rpcd limits command runtime.
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+umask 077
+. /usr/libexec/makhzan-usb.sh || exit 1
+JOB=/var/run/makhzan-storage.json
+LOCK=/var/lock/makhzan-storage.lock
+NAS_WARN_MIB=1024
+MODE=foreground
+json_job() { printf '%s\n' "$1" > "$JOB.tmp" && mv -f "$JOB.tmp" "$JOB"; }
+error() {
+ if [ "$MODE" = job ]; then json_job "{\"state\":\"failed\",\"error\":\"$1\",\"finished\":$(date +%s)}"; fi
+ printf '{"ok":false,"error":"%s"}\n' "$1"; exit 1
+}
+step() { [ "$MODE" != job ] || json_job "{\"state\":\"running\",\"step\":\"$1\",\"started\":$started}"; }
+uint() { case "$1" in ''|*[!0-9]*|0[0-9]*) return 1;; esac; [ ${#1} -le 9 ]; }
+usb() {
+ case "$1" in /dev/sd[a-z]|/dev/sd[a-z][a-z]) ;; *) return 1;; esac
+ makhzan_usb_device "$1" && [ ! -f "/sys/class/block/${1#/dev/}/partition" ]
+}
+uuid() { block info "$1" | sed -n 's/.* UUID="\([^"]*\)".*/\1/p'; }
+# Partitions of a whole disk that are mounted (prints "device mountpoint").
+disk_mounts() {
+ awk -v d="$1" '$1==d || (index($1,d)==1 && substr($1,length(d)+1) ~ /^[0-9]+$/) {print $1, $2}' /proc/mounts
+}
+disk_swaps() {
+ awk -v d="$1" 'NR>1 && ($1==d || (index($1,d)==1 && substr($1,length(d)+1) ~ /^[0-9]+$/)) {print $1}' /proc/swaps
+}
+devices() {
+ printf '{"ok":true,"devices":['; sep=''
+ for sys in /sys/block/sd*; do
+  [ -e "$sys" ] || continue; dev=/dev/${sys##*/}; usb "$dev" || continue
+  sectors=$(cat "$sys/size"); model=$(cat "$sys/device/model" 2>/dev/null | tr -cd 'A-Za-z0-9 ._-' | sed 's/ *$//')
+  mounts=$(disk_mounts "$dev" | awk '{printf "%s\"%s\"", (n++?",":""), $2}'); swaps=$(disk_swaps "$dev" | wc -l)
+  system=false; disk_mounts "$dev" | awk '$2=="/" || $2=="/overlay" || $2=="/rom/overlay" {f=1} END {exit !f}' && system=true
+  printf '%s{"path":"%s","model":"%s","size_mib":%s,"mounts":[%s],"swap_active":%s,"system":%s}' "$sep" "$dev" "$model" "$((sectors / 2048))" "$mounts" "$([ "$swaps" -gt 0 ] && echo true || echo false)" "$system"; sep=,
+ done
+ printf ']}\n'
+}
+plan() {
+ dev=$1; ext=$2; swap=$3; nas=$4
+ usb "$dev" || error 'Select a whole USB disk'
+ uint "$ext" && uint "$swap" && uint "$nas" || error 'Sizes must be nonnegative integer MiB'
+ [ "$ext" -eq 0 ] || [ "$ext" -ge 128 ] || error 'Extroot minimum is 128 MiB'
+ [ "$swap" -eq 0 ] || [ "$swap" -ge 16 ] || error 'Swap minimum is 16 MiB'
+ [ "$nas" -eq 0 ] || [ "$nas" -ge 32 ] || error 'NAS minimum is 32 MiB'
+ sectors=$(cat "/sys/block/${dev#/dev/}/size"); capacity=$((sectors / 2048)); used=$((ext + swap + nas))
+ [ "$used" -gt 0 ] || error 'Select at least one role'
+ [ "$used" -le "$((capacity - 16))" ] || error 'Selected sizes exceed usable capacity'
+ if [ "$ext" -gt 0 ]; then
+  overlay=$(makhzan_overlay_dir) || error 'Unsupported overlay layout; extroot is not available on this router'
+  kib=$(du -sk "$overlay" | awk '{print $1}')
+  [ "$ext" -gt "$((kib / 1024 + 64))" ] || error 'Extroot is too small for existing overlay plus reserve'
+ fi
+ free=$((capacity - used - 16))
+ # Warning only: extroot and/or swap leave no useful room for the file server.
+ nas_warning=false; consumers=''
+ if [ "$nas" -eq 0 ] && [ "$free" -lt "$NAS_WARN_MIB" ]; then
+  [ "$ext" -eq 0 ] || consumers='"extroot"'
+  [ "$swap" -eq 0 ] || consumers="${consumers:+$consumers,}\"swap\""
+  [ -z "$consumers" ] || nas_warning=true
+ fi
+}
+plan_json() {
+ printf '{"ok":true,"capacity_mib":%s,"reserved_mib":16,"unallocated_mib":%s,"nas_space_warning":%s,"nas_space_consumers":[%s],"nas_warning_threshold_mib":%s}\n' "$capacity" "$free" "$nas_warning" "$consumers" "$NAS_WARN_MIB"
+}
+busy_check() {
+ [ -z "$(disk_mounts "$dev")" ] || error 'Disk is mounted; release it first. Active extroot requires internal-storage reboot'
+ [ -z "$(disk_swaps "$dev")" ] || error 'Disk contains active swap; release it first'
+ for sys in /sys/class/block/${dev#/dev/}*; do
+  [ -e "$sys" ] || continue
+  for holder in "$sys"/holders/*; do [ ! -e "$holder" ] || error 'Disk has active device-mapper or RAID holders'; done
+ done
+}
+preflight() {
+ plan "$1" "$2" "$3" "$4"
+ [ "$5" = "ERASE:$dev:$ext:$swap:$nas" ] || error 'Explicit erase confirmation is missing'
+ busy_check
+ [ "$ext" -eq 0 ] || [ "$(uci -q get fstab.afzoon_extroot.enabled)" != 1 ] || error 'Disable the existing Afzoon extroot configuration before creating another'
+ for tool in parted partprobe mkfs.ext4 mkswap swapon swapoff block mount umount uci; do command -v "$tool" >/dev/null || error 'A required storage tool is missing'; done
+ [ "$nas" -eq 0 ] || ! makhzan_mounted /mnt/makhzan || error 'NAS target is already mounted; release it first'
+ [ ! -d "$LOCK" ] || error 'Another storage operation is running'
+}
+# Hotplug may auto-mount or swapon stale signatures on fresh partitions; detach before formatting.
+detach() {
+ grep -q "^$1 " /proc/swaps && swapoff "$1" 2>/dev/null
+ while awk -v d="$1" '$1==d {f=1} END {exit !f}' /proc/mounts; do umount "$1" 2>/dev/null || return 1; done
+ return 0
+}
+run() {
+ MODE=job; started=$(date +%s)
+ mkdir "$LOCK" 2>/dev/null || error 'Another storage operation is running'
+ stage=''; trap 'if [ -n "$stage" ]; then umount "$stage" 2>/dev/null; rmdir "$stage" 2>/dev/null; fi; rmdir "$LOCK"' EXIT
+ step checking
+ preflight_locked "$@"
+ step partitioning
+ usb "$dev" || error 'USB identity changed; refusing to write'
+ parted -s "$dev" mklabel gpt >/dev/null 2>&1 || error 'Partition table creation failed'
+ start=1; num=1; ep=''; sp=''; np=''
+ for role in extroot swap nas; do
+  case "$role" in extroot) size=$ext; type=ext4;; swap) size=$swap; type=linux-swap;; nas) size=$nas; type=ext4;; esac
+  [ "$size" -gt 0 ] || continue; end=$((start + size))
+  parted -s "$dev" mkpart primary "$type" "${start}MiB" "${end}MiB" >/dev/null 2>&1 || error 'Partition creation failed; disk may be partially partitioned'
+  case "$role" in extroot) ep=$dev$num;; swap) sp=$dev$num;; nas) np=$dev$num;; esac
+  start=$end; num=$((num+1))
+ done
+ partprobe "$dev" >/dev/null 2>&1 || error 'Kernel partition refresh failed'
+ for part in "$ep" "$sp" "$np"; do
+  [ -n "$part" ] || continue; tries=0
+  while [ ! -b "$part" ] && [ "$tries" -lt 10 ]; do sleep 1; tries=$((tries+1)); done
+  [ -b "$part" ] || error 'Partition device did not appear'
+  makhzan_usb_device "$part" || error 'Partition is not on a physical USB disk'
+ done
+ sleep 2
+ step formatting
+ for part in "$ep" "$sp" "$np"; do [ -z "$part" ] || detach "$part" || error 'A new partition was auto-mounted and could not be released'; done
+ [ -z "$ep" ] || mkfs.ext4 -q -F -L makhzan-extroot "$ep" >/dev/null 2>&1 || error 'Extroot formatting failed'
+ [ -z "$np" ] || mkfs.ext4 -q -F -L makhzan-nas "$np" >/dev/null 2>&1 || error 'NAS formatting failed'
+ [ -z "$sp" ] || mkswap -L makhzan-swap "$sp" >/dev/null 2>&1 || error 'Swap formatting failed'
+ eu=''; su=''; nu=''
+ if [ -n "$ep" ]; then eu=$(uuid "$ep"); [ -n "$eu" ] || error 'Extroot UUID missing'; fi
+ if [ -n "$sp" ]; then su=$(uuid "$sp"); [ -n "$su" ] || error 'Swap UUID missing'; fi
+ if [ -n "$np" ]; then nu=$(uuid "$np"); [ -n "$nu" ] || error 'NAS UUID missing'; fi
+ step configuring
+ for section in makhzan_extroot makhzan_swap makhzan_nas; do uci -q delete "fstab.$section"; done
+ if [ -n "$eu" ]; then
+  uci set fstab.makhzan_extroot=mount; uci set fstab.makhzan_extroot.uuid="$eu"; uci set fstab.makhzan_extroot.target=/overlay; uci set fstab.makhzan_extroot.fstype=ext4; uci set fstab.makhzan_extroot.options=rw,noatime; uci set fstab.makhzan_extroot.enabled=0
+ fi
+ if [ -n "$su" ]; then uci set fstab.makhzan_swap=swap; uci set fstab.makhzan_swap.uuid="$su"; uci set fstab.makhzan_swap.enabled=1; fi
+ if [ -n "$nu" ]; then
+  uci set fstab.makhzan_nas=mount; uci set fstab.makhzan_nas.uuid="$nu"; uci set fstab.makhzan_nas.target=/mnt/makhzan; uci set fstab.makhzan_nas.fstype=ext4; uci set fstab.makhzan_nas.options=rw,noatime; uci set fstab.makhzan_nas.enabled=1
+  uci set makhzan.main.root=/mnt/makhzan
+ fi
+ uci set makhzan.main.storage_extroot_uuid="$eu"; uci commit makhzan || error 'Configuration save failed'
+ uci commit fstab || error 'Mount configuration save failed'
+ if [ -n "$ep" ]; then
+  step copying_overlay
+  stage=$(mktemp -d /tmp/makhzan-extroot.XXXXXX) || error 'Staging directory failed'
+  mount -t ext4 "$ep" "$stage" || error 'Cannot mount extroot staging'
+  cp -a "$overlay/." "$stage/" || error 'Overlay copy failed; extroot remains disabled'
+  uci set fstab.makhzan_extroot.enabled=1; uci commit fstab || error 'Extroot activation configuration failed'
+  mkdir -p "$stage/upper/etc/config" && cp /etc/config/fstab "$stage/upper/etc/config/fstab" || { uci set fstab.makhzan_extroot.enabled=0; uci commit fstab; error 'Staged mount configuration failed'; }
+  sync; umount "$stage" || error 'Staging unmount failed'; rmdir "$stage"; stage=''
+ fi
+ step activating
+ [ -z "$sp" ] || swapon "$sp" || error 'Swap activation failed'
+ if [ -n "$np" ]; then
+  mkdir -p /mnt/makhzan; mount -t ext4 -o rw,noatime "$np" /mnt/makhzan || error 'NAS mount failed'
+  makhzan_usb_mount /mnt/makhzan || error 'NAS USB mount verification failed'
+  makhzan_layout /mnt/makhzan || error 'NAS folder layout failed'
+  # Refresh SMB shares and DLNA for the new disk when services were configured before.
+  [ "$(uci -q get makhzan.main.enabled)" != 1 ] || /usr/sbin/makhzanctl apply >/dev/null 2>&1 || true
+ fi
+ sync
+ reboot=false; [ -z "$ep" ] || reboot=true
+ json_job "{\"state\":\"done\",\"ok\":true,\"reboot_required\":$reboot,\"unallocated_mib\":$free,\"finished\":$(date +%s)}"
+}
+preflight_locked() {
+ plan "$1" "$2" "$3" "$4"
+ [ "$5" = "ERASE:$dev:$ext:$swap:$nas" ] || error 'Explicit erase confirmation is missing'
+ busy_check
+ [ "$ext" -eq 0 ] || overlay=$(makhzan_overlay_dir) || error 'Unsupported overlay layout'
+}
+apply() {
+ preflight "$@"
+ rm -f "$JOB"
+ if command -v setsid >/dev/null; then
+  setsid /usr/libexec/makhzan-storage run "$@" </dev/null >/dev/null 2>&1 &
+ else
+  ( trap '' HUP INT TERM; exec /usr/libexec/makhzan-storage run "$@" ) </dev/null >/dev/null 2>&1 &
+ fi
+ printf '{"ok":true,"started":true}\n'
+}
+# Stop using a USB disk so it can be unplugged or re-partitioned. Active extroot cannot be released.
+release() {
+ dev=$1; usb "$dev" || error 'Select a whole USB disk'
+ ! disk_mounts "$dev" | awk '$2=="/" || $2=="/overlay" || $2=="/rom/overlay" {f=1} END {exit !f}' || error 'This disk holds the active extroot; disable extroot and reboot first'
+ [ ! -d "$LOCK" ] || error 'Another storage operation is running'
+ mounts=$(disk_mounts "$dev")
+ if [ -n "$mounts" ]; then
+  for svc in samba4 minidlna; do [ -x "/etc/init.d/$svc" ] && /etc/init.d/$svc stop >/dev/null 2>&1; done
+  sync
+  echo "$mounts" | while read -r part target; do umount "$target" 2>/dev/null || umount -l "$target" 2>/dev/null; done
+  for svc in samba4 minidlna; do [ -x "/etc/init.d/$svc" ] && /etc/init.d/$svc enabled && /etc/init.d/$svc start >/dev/null 2>&1; done
+ fi
+ for part in $(disk_swaps "$dev"); do swapoff "$part" || error 'Swap could not be disabled'; done
+ [ -z "$(disk_mounts "$dev")" ] || error 'A partition is still in use; close open files and retry'
+ printf '{"ok":true}\n'
+}
+job_status() { if [ -s "$JOB" ]; then cat "$JOB"; elif [ -d "$LOCK" ]; then echo '{"state":"running"}'; else echo '{"state":"idle"}'; fi; }
+case "$1" in
+ devices) devices;;
+ plan) plan "$2" "$3" "$4" "$5"; plan_json;;
+ apply) apply "$2" "$3" "$4" "$5" "$6";;
+ run) shift; run "$@";;
+ release) release "$2";;
+ job) job_status;;
+ *) error 'Unknown storage action';;
+esac

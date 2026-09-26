@@ -1,0 +1,14 @@
+#!/bin/sh /etc/rc.common
+# Makhzan - USB NAS manager for OpenWrt
+# Copyright (C) 2026 dreamboxone
+# SPDX-License-Identifier: GPL-3.0-only
+#
+# This program is free software: you can redistribute it and/or modify it under the terms
+# of the GNU General Public License version 3 as published by the Free Software Foundation.
+# It is distributed WITHOUT ANY WARRANTY; see the LICENSE file for details.
+# Samba keeps the lockout policy in RAM; re-apply it and refresh shares once USB storage is mounted.
+START=99
+
+start() {
+	( /usr/sbin/makhzanctl boot >/dev/null 2>&1 & )
+}
