@@ -232,6 +232,8 @@ rm -f /etc/config/makhzan
 
 برنامه کد کامپایل‌شده ندارد، پس SDK هر معماری کافی است: SDK نسخهٔ **25.12** فایل `.apk` و SDK نسخهٔ **24.10** فایل `.ipk` می‌سازد. خروجی روی همهٔ معماری‌ها نصب می‌شود.
 
+ساخت خودکار: با هر push، GitHub Actions بسته‌ها را با SDK رسمی OpenWrt می‌سازد و روی x86-64، ARMv8/ARMv9 و ARMv7 نصب و تست می‌کند. با push یک تگ نسخه (مثلاً `v1.1.0`) نسخهٔ جدید به‌طور خودکار در بخش Releases منتشر می‌شود.
+
 <div dir="ltr">
 
 ```sh
@@ -328,7 +330,7 @@ Windows connects to a server as only one user at a time: after logging in as one
 
 ## Build
 
-The package contains no compiled code, so an SDK for any target works: a 25.12 SDK produces the `.apk`, a 24.10 SDK the `.ipk`.
+The package contains no compiled code, so an SDK for any target works: a 25.12 SDK produces the `.apk`, a 24.10 SDK the `.ipk`. GitHub Actions builds both with the official OpenWrt SDK images on every push, installs and exercises them on x86-64, ARMv8/ARMv9 and ARMv7 OpenWrt containers, and publishes a release when a version tag (for example `v1.1.0`) is pushed.
 
 ```sh
 ./scripts/build-package.sh /path/to/openwrt-sdk-25.12 /path/to/openwrt-sdk-24.10

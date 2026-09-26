@@ -1,0 +1,125 @@
+# Makhzan - USB NAS manager for OpenWrt
+# Copyright (C) 2026 dreamboxone
+# SPDX-License-Identifier: GPL-3.0-only
+#
+# Builds the architecture-independent package (.apk for OpenWrt 25.12+, .ipk for 24.10),
+# installs and exercises it in official OpenWrt containers for x86-64, ARMv8/ARMv9 (aarch64)
+# and ARMv7, and publishes a GitHub release for version tags (v*).
+name: Build and release
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  APK_RELEASE: 25.12.5
+  IPK_RELEASE: 24.10.8
+
+jobs:
+  build:
+    name: Build ${{ matrix.format }}
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        format: [ apk, ipk ]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build with the official OpenWrt SDK
+        run: |
+          if [ "${{ matrix.format }}" = apk ]; then release=$APK_RELEASE; else release=$IPK_RELEASE; fi
+          mkdir -p out && chmod 0777 out
+          docker run --rm -v "$PWD":/src:ro -v "$PWD/out":/out -e MAKHZAN_OUT=/out \
+            "openwrt/sdk:x86-64-v$release" bash -ec '
+              [ -f include/toplevel.mk ] || ./setup.sh
+              ./scripts/feeds update base packages luci >/dev/null
+              ./scripts/feeds install luci-base rpcd rpcd-mod-file block-mount e2fsprogs parted swap-utils >/dev/null
+              /src/scripts/build-package.sh "$PWD"'
+          ls -l out
+
+      - name: Show build log on failure
+        if: failure()
+        run: tail -n 100 out/build-*.log || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: makhzan-${{ matrix.format }}
+          path: |
+            out/*.apk
+            out/*.ipk
+          if-no-files-found: error
+
+  test:
+    name: Test ${{ matrix.format }} on ${{ matrix.arch }}
+    needs: build
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { format: apk, arch: x86-64,                 platform: linux/amd64,  image: x86-64 }
+          - { format: apk, arch: ARMv8/ARMv9 (aarch64),  platform: linux/arm64,  image: armsr-armv8 }
+          - { format: apk, arch: ARMv7,                  platform: linux/arm/v7, image: armsr-armv7 }
+          - { format: ipk, arch: x86-64,                 platform: linux/amd64,  image: x86-64 }
+          - { format: ipk, arch: ARMv8/ARMv9 (aarch64),  platform: linux/arm64,  image: armsr-armv8 }
+          - { format: ipk, arch: ARMv7,                  platform: linux/arm/v7, image: armsr-armv7 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: makhzan-${{ matrix.format }}
+          path: pkg
+
+      - name: Install and exercise in an OpenWrt container
+        run: |
+          if [ "${{ matrix.format }}" = apk ]; then release=$APK_RELEASE; else release=$IPK_RELEASE; fi
+          docker run --rm --platform "${{ matrix.platform }}" \
+            -v "$PWD/pkg":/pkg:ro -v "$PWD/.github/scripts":/ci:ro \
+            "openwrt/rootfs:${{ matrix.image }}-v$release" /bin/sh /ci/smoke-test.sh "${{ matrix.format }}"
+
+  release:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [ build, test ]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Check tag against the Makefile version
+        run: |
+          version=$(sed -n 's/^PKG_VERSION:=//p' Makefile)
+          release=$(sed -n 's/^PKG_RELEASE:=//p' Makefile)
+          case "$GITHUB_REF_NAME" in
+            "v$version"|"v$version-r$release") ;;
+            *) echo "Tag $GITHUB_REF_NAME does not match version $version-r$release" >&2; exit 1 ;;
+          esac
+          echo "PKG_FULL=$version-r$release" >> "$GITHUB_ENV"
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd dist
+          sha256sum *.apk *.ipk > SHA256SUMS
+          apk=$(ls *.apk); ipk=$(ls *.ipk)
+          sed -e "s|@TAG@|$GITHUB_REF_NAME|g" -e "s|@APK@|$apk|g" -e "s|@IPK@|$ipk|g" \
+              -e "s|@REPO@|$GITHUB_REPOSITORY|g" -e "s|@VERSION@|$PKG_FULL|g" \
+              ../.github/release-notes.md > ../notes.md
+          gh release create "$GITHUB_REF_NAME" *.apk *.ipk SHA256SUMS \
+            --title "Makhzan $GITHUB_REF_NAME" --notes-file ../notes.md

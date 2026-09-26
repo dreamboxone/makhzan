@@ -9,10 +9,11 @@
 # Builds the architecture-independent package with one or more OpenWrt SDKs.
 # An SDK for OpenWrt 25.12+ produces .apk; an SDK for 24.10 or older produces .ipk.
 # Any target works: the package contains no compiled code (PKGARCH:=all).
+# MAKHZAN_OUT overrides the output directory (default: ./dist).
 set -eu
 [ $# -ge 1 ] || { echo 'Usage: build-package.sh /path/to/openwrt-sdk [/path/to/another-sdk ...]' >&2; exit 2; }
 SOURCE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-OUT="$SOURCE/dist"
+OUT=${MAKHZAN_OUT:-$SOURCE/dist}
 mkdir -p "$OUT"
 for SDK in "$@"; do
 	[ -f "$SDK/include/toplevel.mk" ] || { echo "Not an OpenWrt SDK: $SDK" >&2; exit 2; }
