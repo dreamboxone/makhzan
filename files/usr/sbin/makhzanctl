@@ -208,16 +208,40 @@ smb_required() {
 smb_flags() { pdbedit -L -w 2>/dev/null | awk -F: -v u="$1" '$1==u {print $5; exit}'; }
 smb_password() { printf '%s\n%s\n' "$2" "$2" | smbpasswd -s $3 "$1" >/dev/null 2>&1; }
 
+# ---- Extroot ----
+# UUID of the Makhzan extroot partition if the running system booted from it, else empty.
+extroot_active_uuid() {
+	want=$(uci -q get fstab.makhzan_extroot.uuid); [ -n "$want" ] || return 0
+	for mp in /overlay /rom/overlay; do
+		src=$(awk -v m="$mp" '$2==m && $3!="overlay" {print $1; exit}' /proc/mounts)
+		[ -n "$src" ] || continue
+		[ "$(block info "$src" 2>/dev/null | sed -n 's/.* UUID="\([^"]*\)".*/\1/p')" = "$want" ] && { echo "$want"; return 0; }
+	done
+}
+# Turning extroot off must edit the fstab of the internal storage. While extroot is active that fstab
+# is not reachable in a portable way, so the router has to be started without the USB disk first.
+extroot_off() {
+	[ "$(uci -q get fstab.makhzan_extroot.enabled)" = 1 ] || { ok; return; }
+	[ -z "$(extroot_active_uuid)" ] || { fail 'Extroot is active: power off, unplug the USB disk, power on, then turn extroot off'; return; }
+	uci set fstab.makhzan_extroot.enabled=0 && uci commit fstab || { fail 'Mount configuration save failed'; return; }
+	uci -q delete makhzan.main.storage_extroot_uuid; uci -q delete makhzan.main.storage_boot; uci commit makhzan
+	ok
+}
+
 # ---- Status ----
 status() {
 	language=$(uci -q get makhzan.main.language); [ "$language" = en ] || language=fa
-	reboot=false; extroot=false; pending_uuid=$(uci -q get makhzan.main.storage_extroot_uuid)
-	overlay_src=$(awk '$2=="/overlay" {print $1; exit}' /proc/mounts)
-	active_uuid=$([ -n "$overlay_src" ] && block info "$overlay_src" 2>/dev/null | sed -n 's/.* UUID="\([^"]*\)".*/\1/p')
-	if [ -n "$pending_uuid" ]; then
-		if [ "$active_uuid" = "$pending_uuid" ]; then extroot=true
-		elif [ "$(uci -q get fstab.makhzan_extroot.enabled)" = 1 ]; then reboot=true; fi
+	# Extroot: off | pending (prepared in this boot, reboot needed) | active | inactive (configured but the
+	# router did not boot from it: USB missing or activation failed). The overlay is /overlay or, on
+	# loop-backed targets, /rom/overlay.
+	extroot_state=off
+	if [ "$(uci -q get fstab.makhzan_extroot.enabled)" = 1 ]; then
+		if [ -n "$(extroot_active_uuid)" ]; then extroot_state=active
+		elif [ "$(uci -q get makhzan.main.storage_boot)" = "$(cat /proc/sys/kernel/random/boot_id)" ]; then extroot_state=pending
+		else extroot_state=inactive; fi
 	fi
+	reboot=false; [ "$extroot_state" != pending ] || reboot=true
+	extroot=false; [ "$extroot_state" != active ] || extroot=true
 	r=$(root); disk=null; ready=false; users=''; trash=0
 	if valid_root; then
 		ready=true
@@ -238,7 +262,7 @@ status() {
 	smbd_running=false; pidof smbd >/dev/null && smbd_running=true
 	dlna_running=false; pidof minidlnad >/dev/null && dlna_running=true
 	job=$(/usr/libexec/makhzan-storage job)
-	printf '{"version":"%s","language":"%s","reboot_required":%s,"extroot_active":%s,"ready":%s,"disk":%s,"trash_kib":%s,"users":[%s],"job":%s,"services":{"samba_installed":%s,"minidlna_installed":%s,"samba_enabled":%s,"dlna_enabled":%s,"samba_running":%s,"dlna_running":%s}}\n' \
+	printf '{"version":"%s","language":"%s","reboot_required":%s,"extroot_active":%s,"extroot_state":"'"$extroot_state"'","ready":%s,"disk":%s,"trash_kib":%s,"users":[%s],"job":%s,"services":{"samba_installed":%s,"minidlna_installed":%s,"samba_enabled":%s,"dlna_enabled":%s,"samba_running":%s,"dlna_running":%s}}\n' \
 		"$VERSION" "$language" "$reboot" "$extroot" "$ready" "$disk" "${trash:-0}" "$users" "$job" \
 		"$(smb_installed && echo true || echo false)" "$(command -v minidlnad >/dev/null && echo true || echo false)" \
 		"$(bool "$(uci -q get makhzan.main.samba)")" "$(bool "$(uci -q get makhzan.main.dlna)")" "$smbd_running" "$dlna_running"
@@ -430,6 +454,7 @@ case "$1" in
 	rename) rename_folder "$2" "$3" "$4";;
 	trash) trash_folder "$2" "$3";;
 	trash-empty) empty_trash;;
+	extroot-off) extroot_off;;
 	option) option_set "$2" "$3";;
 	apply) apply;;
 	boot) boot;;

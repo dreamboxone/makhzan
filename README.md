@@ -64,7 +64,7 @@ Copyright © 2026 dreamboxone — منتشرشده با مجوز **GNU GPL نس�
 <div dir="ltr">
 
 ```sh
-scp -O luci-app-makhzan-1.1.0-r9.apk root@192.168.1.1:/tmp/
+scp -O luci-app-makhzan-1.1.0-r10.apk root@192.168.1.1:/tmp/
 ```
 
 </div>
@@ -78,7 +78,7 @@ scp -O luci-app-makhzan-1.1.0-r9.apk root@192.168.1.1:/tmp/
 ```sh
 apk update
 apk add kmod-usb-storage kmod-fs-ext4 samba4-server minidlna
-apk add --allow-untrusted /tmp/luci-app-makhzan-1.1.0-r9.apk
+apk add --allow-untrusted /tmp/luci-app-makhzan-1.1.0-r10.apk
 ```
 
 </div>
@@ -90,7 +90,7 @@ apk add --allow-untrusted /tmp/luci-app-makhzan-1.1.0-r9.apk
 ```sh
 opkg update
 opkg install kmod-usb-storage kmod-fs-ext4 samba4-server minidlna
-opkg install /tmp/luci-app-makhzan_1.1.0-r9_all.ipk
+opkg install /tmp/luci-app-makhzan_1.1.0-r10_all.ipk
 ```
 
 </div>
@@ -281,15 +281,15 @@ Architecture independent (`PKGARCH:=all`): ARMv7, ARMv8/aarch64, ARMv9, x86-64 a
 ## Install
 
 ```sh
-scp -O luci-app-makhzan-1.1.0-r9.apk root@192.168.1.1:/tmp/
+scp -O luci-app-makhzan-1.1.0-r10.apk root@192.168.1.1:/tmp/
 
 # OpenWrt 25.12+
 apk update && apk add kmod-usb-storage kmod-fs-ext4 samba4-server minidlna
-apk add --allow-untrusted /tmp/luci-app-makhzan-1.1.0-r9.apk
+apk add --allow-untrusted /tmp/luci-app-makhzan-1.1.0-r10.apk
 
 # OpenWrt 24.10 and older
 opkg update && opkg install kmod-usb-storage kmod-fs-ext4 samba4-server minidlna
-opkg install /tmp/luci-app-makhzan_1.1.0-r9_all.ipk
+opkg install /tmp/luci-app-makhzan_1.1.0-r10_all.ipk
 ```
 
 Or upload the package in **System → Software**. Log out of LuCI and log in again once (rpcd grants the new permissions at login), then open **Services → Makhzan**. When upgrading from 1.0.0, also reload the page once with Ctrl+F5.

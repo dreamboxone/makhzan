@@ -86,6 +86,7 @@ preflight() {
  [ "$ext" -eq 0 ] || [ "$(uci -q get fstab.afzoon_extroot.enabled)" != 1 ] || error 'Disable the existing Afzoon extroot configuration before creating another'
  for tool in parted partprobe mkfs.ext4 mkswap swapon swapoff block mount umount uci; do command -v "$tool" >/dev/null || error 'A required storage tool is missing'; done
  [ "$nas" -eq 0 ] || ! makhzan_mounted /mnt/makhzan || error 'NAS target is already mounted; release it first'
+ clear_stale
  [ ! -d "$LOCK" ] || error 'Another storage operation is running'
 }
 # Hotplug may auto-mount or swapon stale signatures on fresh partitions; detach before formatting.
@@ -94,10 +95,13 @@ detach() {
  while awk -v d="$1" '$1==d {f=1} END {exit !f}' /proc/mounts; do umount "$1" 2>/dev/null || return 1; done
  return 0
 }
+# The lock directory is created by apply() before this detached job starts; the job records its pid so a
+# killed job can be recognised (see job_status) instead of looking busy forever.
 run() {
  MODE=job; started=$(date +%s)
- mkdir "$LOCK" 2>/dev/null || error 'Another storage operation is running'
- stage=''; trap 'if [ -n "$stage" ]; then umount "$stage" 2>/dev/null; rmdir "$stage" 2>/dev/null; fi; rmdir "$LOCK"' EXIT
+ [ -d "$LOCK" ] || error 'Storage job started without its lock'
+ echo $$ > "$LOCK/pid"
+ stage=''; trap 'if [ -n "$stage" ]; then umount "$stage" 2>/dev/null; rmdir "$stage" 2>/dev/null; fi; rm -rf "$LOCK"' EXIT
  step checking
  preflight_locked "$@"
  step partitioning
@@ -138,7 +142,7 @@ run() {
   uci set fstab.makhzan_nas=mount; uci set fstab.makhzan_nas.uuid="$nu"; uci set fstab.makhzan_nas.target=/mnt/makhzan; uci set fstab.makhzan_nas.fstype=ext4; uci set fstab.makhzan_nas.options=rw,noatime; uci set fstab.makhzan_nas.enabled=1
   uci set makhzan.main.root=/mnt/makhzan
  fi
- uci set makhzan.main.storage_extroot_uuid="$eu"; uci commit makhzan || error 'Configuration save failed'
+ uci set makhzan.main.storage_extroot_uuid="$eu"; uci set makhzan.main.storage_boot="$(cat /proc/sys/kernel/random/boot_id)"; uci commit makhzan || error 'Configuration save failed'
  uci commit fstab || error 'Mount configuration save failed'
  if [ -n "$ep" ]; then
   step copying_overlay
@@ -170,7 +174,8 @@ preflight_locked() {
 }
 apply() {
  preflight "$@"
- rm -f "$JOB"
+ mkdir "$LOCK" 2>/dev/null || error 'Another storage operation is running'
+ json_job "{\"state\":\"running\",\"step\":\"checking\",\"started\":$(date +%s)}" || { rm -rf "$LOCK"; error 'Job state could not be written'; }
  if command -v setsid >/dev/null; then
   setsid /usr/libexec/makhzan-storage run "$@" </dev/null >/dev/null 2>&1 &
  else
@@ -182,6 +187,7 @@ apply() {
 release() {
  dev=$1; usb "$dev" || error 'Select a whole USB disk'
  ! disk_mounts "$dev" | awk '$2=="/" || $2=="/overlay" || $2=="/rom/overlay" {f=1} END {exit !f}' || error 'This disk holds the active extroot; disable extroot and reboot first'
+ clear_stale
  [ ! -d "$LOCK" ] || error 'Another storage operation is running'
  mounts=$(disk_mounts "$dev")
  if [ -n "$mounts" ]; then
@@ -194,7 +200,23 @@ release() {
  [ -z "$(disk_mounts "$dev")" ] || error 'A partition is still in use; close open files and retry'
  printf '{"ok":true}\n'
 }
-job_status() { if [ -s "$JOB" ]; then cat "$JOB"; elif [ -d "$LOCK" ]; then echo '{"state":"running"}'; else echo '{"state":"idle"}'; fi; }
+# Lock present without a pid file: the job is still starting. Pid recorded but gone, or a job file that
+# still says "running" without a lock: the job was killed.
+lock_state() {
+ [ -d "$LOCK" ] || { echo none; return; }
+ lock_pid=$(cat "$LOCK/pid" 2>/dev/null)
+ if [ -z "$lock_pid" ] || kill -0 "$lock_pid" 2>/dev/null; then echo alive; else echo dead; fi
+}
+clear_stale() {
+ case "$(lock_state)" in dead) rm -rf "$LOCK";; alive) return 0;; esac
+ if grep -q '"state":"running"' "$JOB" 2>/dev/null; then
+  json_job "{\"state\":\"failed\",\"error\":\"Disk preparation was interrupted\",\"finished\":$(date +%s)}"
+ fi
+}
+job_status() {
+ clear_stale
+ if [ -s "$JOB" ]; then cat "$JOB"; elif [ -d "$LOCK" ]; then echo '{"state":"running"}'; else echo '{"state":"idle"}'; fi
+}
 case "$1" in
  devices) devices;;
  plan) plan "$2" "$3" "$4" "$5"; plan_json;;

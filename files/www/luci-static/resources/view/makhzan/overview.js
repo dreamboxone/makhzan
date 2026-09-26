@@ -126,7 +126,9 @@ var FA_ERRORS = {
 	'This disk holds the active extroot; disable extroot and reboot first': 'extroot فعال روی این دیسک است و قابل آزادسازی نیست.',
 	'Explicit erase confirmation is missing': 'تأیید پاک‌کردن دیسک انجام نشده است.',
 	'Samba configuration or restart failed': 'تنظیم یا راه‌اندازی مجدد Samba ناموفق بود.',
-	'Unsupported overlay layout; extroot is not available on this router': 'extroot روی این روتر پشتیبانی نمی‌شود.'
+	'Unsupported overlay layout; extroot is not available on this router': 'extroot روی این روتر پشتیبانی نمی‌شود.',
+	'Disk preparation was interrupted': 'آماده‌سازی دیسک نیمه‌کاره متوقف شد (مثلاً با قطع برق). طرح را دوباره اجرا کنید.',
+	'Extroot is active: power off, unplug the USB disk, power on, then turn extroot off': 'extroot فعال است: روتر را خاموش کنید، USB را جدا کنید، روشن کنید و سپس extroot را خاموش کنید.'
 };
 
 function bytes(kib) {
@@ -149,11 +151,22 @@ return view.extend({
 		function msgOf(e) { var m = String(e && e.message || e); return fa && FA_ERRORS[m] ? FA_ERRORS[m] : m; }
 		function notify(e) { ui.addNotification(null, E('p', {}, msgOf(e)), 'error'); }
 		/* Colored action button: tone is one of primary, success, warn, danger, glass, or soft-{blue,violet,amber,green,red}. */
+		/* Errors are shown right next to the button that caused them (not in LuCI's top banner). */
+		function inlineError(b, e) {
+			var old = b.nextElementSibling;
+			if (old && old.classList.contains('mk-inline-error')) old.remove();
+			var note = E('span', { 'class': 'mk-inline-error', 'role': 'alert' }, [ icon('alert'), E('span', {}, msgOf(e)) ]);
+			b.insertAdjacentElement('afterend', note);
+			window.setTimeout(function() { if (note.isConnected) note.remove(); }, 8000);
+		}
 		function btn(text, fn, tone, ico) {
 			var b = E('button', { 'type': 'button', 'class': 'mk-btn ' + (tone || 'primary'), 'click': function() {
 				if (b.dataset.running === '1') return;
+				var old = b.nextElementSibling;
+				if (old && old.classList.contains('mk-inline-error')) old.remove();
 				b.dataset.running = '1'; b.disabled = true; b.classList.add('mk-running');
-				Promise.resolve().then(fn).catch(notify).finally(function() { b.dataset.running = '0'; b.disabled = false; b.classList.remove('mk-running'); });
+				Promise.resolve().then(fn).catch(function(e) { b.isConnected ? inlineError(b, e) : notify(e); })
+					.finally(function() { b.dataset.running = '0'; b.disabled = b.dataset.locked === '1'; b.classList.remove('mk-running'); });
 			} }, [ ico ? icon(ico) : '', E('span', {}, text) ]);
 			return b;
 		}
@@ -307,6 +320,41 @@ return view.extend({
 			lastJob = job.state;
 			return box;
 		}
+		/* The job banner is refreshed on its own (cheap storage-job call), so it never sticks when the
+		 * heavier status call is slow during large USB copies. */
+		var jobBox = E('div'), extrootBox = E('div');
+		banner.replaceChildren(jobBox, extrootBox);
+		function showJob(job) {
+			jobBox.replaceChildren(paintJob(job));
+			var running = job.state === 'running';
+			prepare.dataset.locked = running ? '1' : '0';
+			if (prepare.dataset.running !== '1') prepare.disabled = running;
+			prepare.title = running ? t('آماده‌سازی دیسک در حال انجام است', 'A disk preparation is running') : '';
+		}
+		function extrootOffDialog() {
+			modal(t('خاموش‌کردن extroot', 'Turn off extroot'), [
+				E('p', {}, t('روتر الان از روی USB اجرا می‌شود. برای برگشت به حافظهٔ داخلی:', 'The router is currently running from the USB disk. To return to internal storage:')),
+				E('ol', { 'class': 'mk-steps' }, [
+					E('li', {}, t('روتر را خاموش کنید و دیسک USB را جدا کنید.', 'Power off the router and unplug the USB disk.')),
+					E('li', {}, t('روتر را روشن کنید؛ با حافظهٔ داخلی بالا می‌آید.', 'Power it on; it starts from internal storage.')),
+					E('li', {}, t('همین صفحه را باز کنید و «خاموش‌کردن extroot» را بزنید.', 'Open this page and press "Turn off extroot".')),
+					E('li', {}, t('دیسک USB را دوباره وصل کنید؛ فایل‌سرور خودکار mount می‌شود.', 'Plug the USB disk back in; the file server mounts automatically.'))
+				]),
+				alertBox('', 'alert', t('تنظیماتی که بعد از فعال‌شدن extroot تغییر داده‌اید (مثل کاربر جدید یا رمز) روی USB مانده‌اند و به حافظهٔ داخلی برنمی‌گردند.', 'Settings changed while extroot was active (such as new users or passwords) stay on the USB disk and do not return to internal storage.')),
+				actions([ btn(t('متوجه شدم', 'Got it'), ui.hideModal, 'soft-violet', 'check') ])
+			], 'layers');
+		}
+		function paintExtroot(state) {
+			extrootBox.replaceChildren();
+			if (state === 'pending')
+				extrootBox.appendChild(alertBox('', 'refresh', t('برای فعال‌شدن extroot روتر را ریبوت کنید. تنظیماتی که قبل از ریبوت تغییر دهید به extroot منتقل نمی‌شوند.', 'Reboot the router to activate extroot. Settings changed before the reboot are not carried over to extroot.')));
+			else if (state === 'active')
+				extrootBox.appendChild(E('div', { 'class': 'mk-alert ok' }, [ icon('layers'), E('span', {}, t('روتر از روی USB اجرا می‌شود (extroot فعال است).', 'The router is running from USB (extroot is active).')),
+					btn(t('خاموش‌کردن extroot', 'Turn off extroot'), extrootOffDialog, 'soft-violet mk-small', 'x') ]));
+			else if (state === 'inactive')
+				extrootBox.appendChild(E('div', { 'class': 'mk-alert warn' }, [ icon('alert'), E('span', {}, t('extroot تنظیم شده ولی فعال نیست (دیسک USB وصل نیست یا راه‌اندازی آن ناموفق بود).', 'extroot is configured but not active (the USB disk is missing or activation failed).')),
+					btn(t('خاموش‌کردن extroot', 'Turn off extroot'), function() { return call([ 'extroot-off' ]).then(refresh); }, 'warn mk-small', 'x') ]));
+		}
 		function metric(title, value, sub, color, ico, extra) {
 			return E('div', { 'class': 'mk-metric', 'style': '--accent:' + color }, [
 				E('span', { 'class': 'mk-metric-ico' }, icon(ico)),
@@ -326,8 +374,8 @@ return view.extend({
 					d.extroot_active ? t('extroot فعال است', 'extroot is active') : t('وضعیت اجرای سرویس‌ها', 'Service runtime state'), '#10b981', 'pulse'),
 				metric(t('فلش / هارد USB', 'USB flash / hard drive'), String(devices.length), t('دیسک متصل', 'Connected disks'), '#f59e0b', 'usb')
 			);
-			banner.replaceChildren(paintJob(d.job || { state: 'idle' }));
-			if (d.reboot_required) banner.appendChild(alertBox('', 'refresh', t('برای فعال‌شدن extroot روتر را ریبوت کنید.', 'Reboot the router to activate the prepared extroot.')));
+			showJob(d.job || { state: 'idle' });
+			paintExtroot(d.extroot_state || 'off');
 
 			usersBox.replaceChildren();
 			d.users.forEach(function(u) {
@@ -520,8 +568,15 @@ return view.extend({
 		var tick = function() {
 			if (!root.isConnected) { poll.remove(tick); return; }
 			ticks++;
-			var running = data.job && data.job.state === 'running';
-			if (running || ticks % 5 === 0) return refresh().catch(function() {});
+			if (data.job && data.job.state === 'running') {
+				/* Light job check every 3 s; full refresh once the job has finished. */
+				return call([ 'storage-job' ]).then(function(job) {
+					data.job = job;
+					if (job.state === 'running') showJob(job);
+					else return refresh();
+				}).catch(function() {});
+			}
+			if (ticks % 5 === 0) return refresh().catch(function() {});
 		};
 		poll.add(tick, 3);
 		return root;
