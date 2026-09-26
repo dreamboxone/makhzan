@@ -380,6 +380,7 @@ apply() {
 	ok
 }
 boot() {
+	trap '' HUP
 	[ "$(uci -q get makhzan.main.enabled)" = 1 ] || return 0
 	if smb_installed && grep -q '## makhzan-managed' "$SMB_TEMPLATE" 2>/dev/null; then
 		tries=0; while [ "$tries" -lt 30 ] && ! pidof smbd >/dev/null; do sleep 2; tries=$((tries + 1)); done
@@ -387,7 +388,15 @@ boot() {
 	fi
 	# USB disks can appear after init; wait up to a minute for the NAS mount before refreshing shares.
 	tries=0; while [ "$tries" -lt 30 ] && ! root_remount; do sleep 2; tries=$((tries + 1)); done
-	valid_root && /usr/sbin/makhzanctl apply >/dev/null || logger -t makhzan 'USB storage not ready at boot; shares will be refreshed on next apply'
+	valid_root || { logger -t makhzan 'USB storage not ready at boot; shares will be refreshed on next apply'; return 0; }
+	# Another Makhzan operation may hold the control lock briefly; retry before reporting.
+	tries=0
+	while :; do
+		result=$(/usr/sbin/makhzanctl apply) && return 0
+		tries=$((tries + 1)); [ "$tries" -lt 5 ] || break
+		sleep 3
+	done
+	logger -t makhzan "Automatic apply failed: $result"
 }
 uninstall() {
 	smb_installed && { smb_clear; uci commit samba4; smb_template_off; /etc/init.d/samba4 restart >/dev/null 2>&1; }

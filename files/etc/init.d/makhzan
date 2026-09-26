@@ -10,5 +10,10 @@
 START=99
 
 start() {
-	( /usr/sbin/makhzanctl boot >/dev/null 2>&1 & )
+	# Fully detached: package-manager scripts and init may end before the NAS disk is mounted.
+	if command -v setsid >/dev/null; then
+		setsid /usr/sbin/makhzanctl boot </dev/null >/dev/null 2>&1 &
+	else
+		( trap '' HUP INT TERM; exec /usr/sbin/makhzanctl boot ) </dev/null >/dev/null 2>&1 &
+	fi
 }
