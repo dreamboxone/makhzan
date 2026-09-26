@@ -33,6 +33,8 @@ minidlna 1.3.3, 16 GB USB flash drive. Client: Windows 11. Date: 2026-09-26.
 | Folders | Unicode names, rename, trash; `..`, `../../etc`, `a:b`, newline names rejected | Pass |
 | Folders | Planted symlink not listed and not operable | Pass |
 | DLNA | Enable → minidlnad listening on 8200 with ROOT/media | Pass |
+| DLNA | Files copied into Media over SMB (Persian names) indexed automatically; video played in VLC on Windows via UPnP; server advertised as "Makhzan" | Pass |
+| SMB | Windows opens a private share with a password prompt (unknown Windows accounts are rejected, not mapped to guest) | Pass |
 | UI | LuCI menu no longer hidden behind the page; Vazirmatn on "فارسی" button | Pass |
 | UI | Switches render correctly under the Bootstrap theme's checkbox styles | Pass |
 | UI | Dialogs use Makhzan colors in light/dark, RTL title in Vazirmatn, LTR disk names | Pass |
