@@ -37,3 +37,6 @@ minidlna 1.3.3, 16 GB USB flash drive. Client: Windows 11. Date: 2026-09-26.
 | UI | Switches render correctly under the Bootstrap theme's checkbox styles | Pass |
 | UI | Dialogs use Makhzan colors in light/dark, RTL title in Vazirmatn, LTR disk names | Pass |
 | UI | Persian/English, light/dark, phone width without horizontal scroll | Pass |
+| Extroot | Plan extroot 977 MiB + NAS from the page; overlay copied; after reboot "mount_root: switched to extroot" on a /rom/overlay target | Pass |
+| Extroot | Page reports extroot active; extroot-off refused while active with the power-off/unplug steps | Pass |
+| Hardware | Double restart after reboot traced to a hardware reset (no shutdown sequence in a persistent log, no kernel crash record) while powered by a 1 A adapter; Google WiFi requires 5 V / 3 A | Documented |

@@ -220,6 +220,7 @@ rm -f /etc/config/makhzan
 **سخت‌افزار**
 - سرعت به پورت USB و پردازندهٔ روتر بستگی دارد؛ روی روترهای USB 2.0 معمولاً ۱۵ تا ۳۰ مگابایت بر ثانیه. برای پشتیبان‌گیری خانگی و پخش فیلم مناسب است، نه RAID یا ویرایش ویدیوی سنگین.
 - قبل از کشیدن USB حتماً **آزادسازی دیسک** را بزنید تا اطلاعات خراب نشود.
+- **آداپتور برق استاندارد روتر** را استفاده کنید (برای Google WiFi: USB-C با ۵ ولت و ۳ آمپر، یعنی ۱۵ وات). آداپتور ضعیف (مثلاً ۱ آمپر) همراه با فلش یا هارد USB باعث ریبوت ناگهانی روتر (مخصوصاً هنگام بوت یا اتصال دستگاه‌های وای‌فای) و خراب‌شدن اطلاعات دیسک می‌شود. برای هارد ۲.۵ اینچی از هاب USB برق‌دار یا هارد با برق جداگانه استفاده کنید.
 
 **عمومی**
 - مدیر روتر (root) به همهٔ فایل‌ها دسترسی دارد.
@@ -318,6 +319,7 @@ Removal deletes Makhzan's SMB shares, removes the access-based-enumeration and u
 - The web UI manages top-level folders only; files are handled over SMB. Files deleted over SMB do not go to the recovery trash. Restoring from the trash requires SSH.
 - DLNA has no authentication: anything in `Media` is visible to every device on the LAN. `Shared` and `Media` are writable by all Makhzan users.
 - Performance depends on the router (typically 15-30 MB/s on USB 2.0). Always release the disk before unplugging it.
+- Use the router's proper power supply (Google WiFi: USB-C 5 V / 3 A, 15 W). A weak adapter (for example 1 A) combined with a USB disk causes sudden resets (typically during boot or when Wi-Fi clients connect) and can corrupt data on the disk. Power 2.5-inch hard disks from a powered USB hub or their own supply.
 - The router's root administrator can access all files. No WebDAV, FTP or cloud access.
 
 ## Build
