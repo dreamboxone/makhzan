@@ -148,6 +148,7 @@
 .mk-service-ico{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:13px;color:#fff;background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 60%,#000000));flex:none}
 .mk-service-ico .mk-ico{width:22px;height:22px}
 .mk-service-text{flex:1;min-width:0}
+.mk-engine{font-size:11px;font-weight:600;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:1px 8px;margin-inline-start:8px;vertical-align:middle}
 .mk-connect{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px}
 .mk-connect code{display:inline-flex;align-items:center;gap:6px;background:var(--soft);border:1px dashed #a5b4fc;color:#4338ca;border-radius:10px;padding:6px 10px;user-select:all;font-size:12.5px}
 .mk-connect .mk-ico{width:14px;height:14px}

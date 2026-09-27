@@ -522,8 +522,8 @@ return view.extend({
 		], '#8b5cf6', 'layers');
 
 		/* ---------- Services ---------- */
-		[ [ 'SMB', 'samba', 'samba_installed', 'samba_enabled', t('اشتراک فایل برای ویندوز، اندروید، iOS، مک و لینوکس', 'File sharing for Windows, Android, iOS, macOS and Linux'), 'samba4-server', 'server', '#3b82f6' ],
-		  [ 'MiniDLNA', 'dlna', 'minidlna_installed', 'dlna_enabled', t('پخش فیلم و موسیقی پوشهٔ Media روی تلویزیون', 'Streams the Media folder to TVs'), 'minidlna', 'tv', '#ec4899' ] ].forEach(function(s) {
+		[ [ 'SMB', 'samba',  'samba_installed', 'samba_enabled', t('اشتراک فایل برای ویندوز، اندروید، iOS، مک و لینوکس', 'File sharing for Windows, Android, iOS, macOS and Linux'), 'samba4-server', 'server', '#3b82f6' ],
+		  [ 'DLNA', 'dlna', 'minidlna_installed', 'dlna_enabled', t('پخش فیلم و موسیقی پوشهٔ Media روی تلویزیون', 'Streams the Media folder to TVs'), 'minidlna', 'tv', '#ec4899' ] ].forEach(function(s) {
 			var installed = data.services[s[2]];
 			var check = E('input', { 'type': 'checkbox', 'class': 'mk-switch', 'aria-label': s[0], 'checked': data.services[s[3]] ? 'checked' : null, 'disabled': installed ? null : 'disabled' });
 			check.addEventListener('change', function() {
@@ -534,7 +534,7 @@ return view.extend({
 			});
 			serviceArea.appendChild(E('div', { 'class': 'mk-service', 'style': '--accent:' + s[7] }, [
 				E('span', { 'class': 'mk-service-ico' }, icon(s[6])),
-				E('div', { 'class': 'mk-service-text' }, [ E('strong', {}, s[0]), E('small', {}, installed ? s[4] : t('نصب نیست — بستهٔ ', 'Not installed — install package ') + s[5]) ]),
+				E('div', { 'class': 'mk-service-text' }, [ E('strong', {}, [ s[0], E('span', { 'class': 'mk-engine' }, s[1] === 'samba' ? 'Samba' : 'MiniDLNA') ]), E('small', {}, installed ? s[4] : t('نصب نیست — بستهٔ ', 'Not installed — install package ') + s[5]) ]),
 				check ]));
 		});
 		var services = card(t('سرویس‌های شبکه', 'Network services'), [ serviceArea,

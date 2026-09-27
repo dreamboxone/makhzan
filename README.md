@@ -65,7 +65,7 @@ Copyright © 2026 dreamboxone — منتشرشده با مجوز **GNU GPL نس�
 <div dir="ltr">
 
 ```sh
-scp -O luci-app-makhzan-1.1.0-r11.apk root@192.168.1.1:/tmp/
+scp -O luci-app-makhzan-1.1.0-r12.apk root@192.168.1.1:/tmp/
 ```
 
 </div>
@@ -79,7 +79,7 @@ scp -O luci-app-makhzan-1.1.0-r11.apk root@192.168.1.1:/tmp/
 ```sh
 apk update
 apk add kmod-usb-storage kmod-fs-ext4 samba4-server minidlna
-apk add --allow-untrusted /tmp/luci-app-makhzan-1.1.0-r11.apk
+apk add --allow-untrusted /tmp/luci-app-makhzan-1.1.0-r12.apk
 ```
 
 </div>
@@ -91,7 +91,7 @@ apk add --allow-untrusted /tmp/luci-app-makhzan-1.1.0-r11.apk
 ```sh
 opkg update
 opkg install kmod-usb-storage kmod-fs-ext4 samba4-server minidlna
-opkg install /tmp/luci-app-makhzan_1.1.0-r11_all.ipk
+opkg install /tmp/luci-app-makhzan_1.1.0-r12_all.ipk
 ```
 
 </div>
@@ -157,7 +157,7 @@ rm -f /etc/config/makhzan
 3. **روشن کردن SMB:** در بخش «سرویس‌های شبکه» کلید **SMB** را روشن کنید.
 4. **ساخت کاربر:** **افزودن کاربر** ← نام انگلیسی کوچک (مثلاً `ali`) و رمز حداقل ۸ نویسه.
 5. **اتصال** از دستگاه‌ها (بخش بعد).
-6. (اختیاری) کلید **MiniDLNA** را روشن کنید تا فیلم‌های پوشهٔ Media روی تلویزیون دیده شوند.
+6. (اختیاری) کلید **DLNA** را روشن کنید تا فیلم‌های پوشهٔ Media روی تلویزیون دیده شوند.
 
 ## پوشه‌ها: خصوصی، Shared و Media
 
@@ -318,15 +318,15 @@ Architecture independent (`PKGARCH:=all`): ARMv7, ARMv8/aarch64, ARMv9, x86-64 a
 ## Install
 
 ```sh
-scp -O luci-app-makhzan-1.1.0-r11.apk root@192.168.1.1:/tmp/
+scp -O luci-app-makhzan-1.1.0-r12.apk root@192.168.1.1:/tmp/
 
 # OpenWrt 25.12+
 apk update && apk add kmod-usb-storage kmod-fs-ext4 samba4-server minidlna
-apk add --allow-untrusted /tmp/luci-app-makhzan-1.1.0-r11.apk
+apk add --allow-untrusted /tmp/luci-app-makhzan-1.1.0-r12.apk
 
 # OpenWrt 24.10 and older
 opkg update && opkg install kmod-usb-storage kmod-fs-ext4 samba4-server minidlna
-opkg install /tmp/luci-app-makhzan_1.1.0-r11_all.ipk
+opkg install /tmp/luci-app-makhzan_1.1.0-r12_all.ipk
 ```
 
 Or upload the package in **System → Software**. Log out of LuCI and log in again once (rpcd grants the new permissions at login), then open **Services → Makhzan**. When upgrading from 1.0.0, also reload the page once with Ctrl+F5.
@@ -344,7 +344,7 @@ Removal deletes Makhzan's SMB shares, removes the settings Makhzan added to the 
 
 1. Plug in the USB disk.
 2. In **USB disk allocation**, select the disk (press **Release disk** if it is in use), enable **File server · NAS**, press **Use all remaining**, then **Review plan** → type the disk name → **Erase and create**. This erases the disk; use **Existing storage** instead to keep an ext4 disk's files.
-3. Turn on **SMB** (and **MiniDLNA** for TVs).
+3. Turn on **SMB** (and **DLNA** for TVs).
 4. **Add user**.
 5. Connect (see below).
 

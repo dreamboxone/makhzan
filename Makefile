@@ -9,7 +9,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-makhzan
 PKG_VERSION:=1.1.0
-PKG_RELEASE:=11
+PKG_RELEASE:=12
 PKG_LICENSE:=GPL-3.0-only
 PKG_LICENSE_FILES:=LICENSE
 PKG_MAINTAINER:=dreamboxone
