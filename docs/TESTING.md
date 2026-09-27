@@ -42,3 +42,8 @@ minidlna 1.3.3, 16 GB USB flash drive. Client: Windows 11. Date: 2026-09-26.
 | Extroot | Plan extroot 977 MiB + NAS from the page; overlay copied; after reboot "mount_root: switched to extroot" on a /rom/overlay target | Pass |
 | Extroot | Page reports extroot active; extroot-off refused while active with the power-off/unplug steps | Pass |
 | Hardware | Double restart after reboot traced to a hardware reset (no shutdown sequence in a persistent log, no kernel crash record) while powered by a 1 A adapter; Google WiFi requires 5 V / 3 A | Documented |
+| Release | Router downloaded v1.1.0 from GitHub Releases, SHA256SUMS verified, upgraded r9 → r11; settings re-applied automatically | Pass |
+| Extroot | "Configured but inactive" state shown; Turn off extroot button disables it (state becomes off) | Pass |
+| SMB | VLC mDNS discovery lists only the user's own share plus Media and Shared | Pass |
+| DLNA | VLC Universal Plug'n'Play shows the "Makhzan" server with Browse Folders/Music/Pictures/Video; video listed and playable | Pass |
+| CI | GitHub Actions: apk and ipk installed and exercised on x86_64, aarch64 and armv7l OpenWrt containers | Pass |
