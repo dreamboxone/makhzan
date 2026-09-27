@@ -22,8 +22,21 @@ env:
   IPK_RELEASE: 24.10.8
 
 jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shell syntax
+        run: for f in files/usr/sbin/makhzanctl files/usr/libexec/makhzan-storage files/usr/libexec/makhzan-usb.sh files/etc/init.d/makhzan scripts/build-package.sh .github/scripts/smoke-test.sh; do sh -n "$f"; done
+      - name: JavaScript syntax
+        run: node --check files/www/luci-static/resources/view/makhzan/overview.js
+      - name: Every backend message has a Persian translation
+        run: python3 .github/scripts/check-translations.py
+
   build:
     name: Build ${{ matrix.format }}
+    needs: lint
     runs-on: ubuntu-24.04
     strategy:
       matrix:
