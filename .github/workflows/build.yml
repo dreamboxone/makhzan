@@ -136,5 +136,6 @@ jobs:
           sed -e "s|@TAG@|$GITHUB_REF_NAME|g" -e "s|@APK@|$apk|g" -e "s|@IPK@|$ipk|g" \
               -e "s|@REPO@|$GITHUB_REPOSITORY|g" -e "s|@VERSION@|$PKG_FULL|g" \
               ../.github/release-notes.md > ../notes.md
+          # Tags like v1.1.0-r13 look like semver pre-releases, so mark the new release Latest explicitly.
           gh release create "$GITHUB_REF_NAME" *.apk *.ipk SHA256SUMS \
-            --title "Makhzan $GITHUB_REF_NAME" --notes-file ../notes.md
+            --title "Makhzan $GITHUB_REF_NAME" --notes-file ../notes.md --latest
