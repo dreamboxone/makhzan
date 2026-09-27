@@ -15,11 +15,12 @@ Copyright © 2026 dreamboxone — منتشرشده با مجوز **GNU GPL نس�
 3. [نصب](#نصب)
 4. [حذف برنامه](#حذف-برنامه)
 5. [راه‌اندازی قدم‌به‌قدم](#راهاندازی-قدمبهقدم)
-6. [اتصال از دستگاه‌ها](#اتصال-از-دستگاهها)
-7. [امنیت](#امنیت)
-8. [محدودیت‌ها](#محدودیتها)
-9. [ساخت بسته از سورس](#ساخت-بسته-از-سورس)
-10. [مجوز](#مجوز)
+6. [پوشه‌ها: خصوصی، Shared و Media](#پوشهها-خصوصی-shared-و-media)
+7. [اتصال از دستگاه‌ها](#اتصال-از-دستگاهها) (ویندوز، اندروید با CX File Explorer، آیفون، تلویزیون)
+8. [امنیت](#امنیت)
+9. [محدودیت‌ها](#محدودیتها)
+10. [ساخت بسته از سورس](#ساخت-بسته-از-سورس)
+11. [مجوز](#مجوز)
 
 ---
 
@@ -158,6 +159,23 @@ rm -f /etc/config/makhzan
 5. **اتصال** از دستگاه‌ها (بخش بعد).
 6. (اختیاری) کلید **MiniDLNA** را روشن کنید تا فیلم‌های پوشهٔ Media روی تلویزیون دیده شوند.
 
+## پوشه‌ها: خصوصی، Shared و Media
+
+مخزن سه نوع پوشه دارد. هر سه روی همان دیسک USB هستند، ولی **دسترسی به آن‌ها فرق دارد**:
+
+| پوشه | چه کسی می‌بیند | مناسب برای |
+|---|---|---|
+| **پوشهٔ خصوصی** (هم‌نام کاربر، مثلاً `ali`) | **فقط خود کاربر** با رمز خودش. کاربران دیگر حتی نام آن را نمی‌بینند. | فایل‌های شخصی، مدارک، پشتیبان گوشی |
+| **Shared** | **همهٔ کاربران مخزن** با رمز خودشان (خواندن و نوشتن) | فایل‌های مشترک خانواده: اسناد، عکس‌های خانوادگی، فایل نصب برنامه‌ها |
+| **Media** | **همهٔ کاربران مخزن** (خواندن و نوشتن) **و هر تلویزیون، VLC یا دستگاه دیگری در شبکهٔ خانه از راه DLNA، بدون رمز** (فقط تماشا و شنیدن) | فیلم، سریال، موسیقی و عکس برای پخش روی تلویزیون |
+
+به زبان ساده: **پوشهٔ خصوصی** کمد شخصی شماست، **Shared** کمد مشترک اعضای خانه و **Media** کتابخانهٔ فیلم و موسیقی که هر تلویزیونی در خانه می‌تواند از آن پخش کند.
+
+> ⚠️ **مهم:** DLNA رمز ندارد. هر دستگاهی که به وای‌فای شما وصل است (حتی گوشی مهمان) محتوای **Media** را می‌بیند. عکس مدارک، کارت ملی و فایل‌های شخصی را **هرگز در Media نگذارید**؛ جای آن‌ها پوشهٔ خصوصی است (یا Shared اگر همهٔ اعضای خانه باید ببینند).
+
+- پوشهٔ Media را **داخل** پوشهٔ خصوصی نسازید. Media یک اشتراک جداست که کنار پوشهٔ خصوصی دیده می‌شود؛ با باز کردن `\\192.168.1.1` در ویندوز (یا اتصال در گوشی) هر سه پوشه را می‌بینید. پوشه‌ای که داخل پوشهٔ خصوصی بسازید خصوصی می‌ماند و روی تلویزیون دیده نمی‌شود.
+- فیلم‌ها، آهنگ‌ها و عکس‌هایی که در Media کپی می‌کنید چند ثانیه بعد خودکار در فهرست DLNA ظاهر می‌شوند.
+
 ## اتصال از دستگاه‌ها
 
 به‌جای `192.168.1.1` آدرس روتر خودتان را بگذارید. نام کاربری و رمز همان است که در مخزن ساختید.
@@ -165,13 +183,27 @@ rm -f /etc/config/makhzan
 | دستگاه | روش |
 |---|---|
 | **ویندوز** | در File Explorer بنویسید `\\192.168.1.1\ali` (پوشهٔ خصوصی)، `\\192.168.1.1\Shared` یا `\\192.168.1.1\Media`. برای ماندگاری: راست‌کلیک روی This PC ← **Map network drive**. |
-| **اندروید** | برنامه‌ای مثل **CX File Explorer** یا **Material Files** ← افزودن مکان شبکه ← SMB ← آدرس روتر. |
+| **اندروید** | برنامهٔ **CX File Explorer** — راهنمای قدم‌به‌قدم پایین همین جدول |
 | **آیفون / آیپد** | برنامهٔ **Files** ← سه‌نقطه ← **Connect to Server** ← `smb://192.168.1.1` |
 | **مک** | Finder ← **Go ← Connect to Server** ← `smb://192.168.1.1` |
 | **لینوکس** | مدیر فایل ← `smb://192.168.1.1/ali` |
 | **تلویزیون** | اگر MiniDLNA روشن باشد، در بخش Media/DLNA تلویزیون دستگاهی با نام **Makhzan** می‌بینید. |
 
-> **نکتهٔ ویندوز:** ویندوز به هر سرور در هر لحظه فقط با **یک کاربر** وصل می‌شود. اگر یک بار با کاربری (مثلاً `ali2`) وارد شده باشید، برای پوشهٔ کاربر دیگر رمز نمی‌خواهد و پوشه باز نمی‌شود. راه‌حل: پنجره‌های File Explorer را ببندید و در CMD دستور `net use * /delete /y` را بزنید (یا یک بار از ویندوز خارج و دوباره وارد شوید). برای استفادهٔ هم‌زمان از دو کاربر، یکی را با آدرس IP (`\192.168.1.1\ali`) و دیگری را با نام روتر (`\OpenWrt.lan\ali2`) باز کنید.
+> **نکتهٔ ویندوز:** ویندوز به هر سرور در هر لحظه فقط با **یک کاربر** وصل می‌شود. اگر یک بار با کاربری (مثلاً `ali2`) وارد شده باشید، برای پوشهٔ کاربر دیگر رمز نمی‌خواهد و پوشه باز نمی‌شود. راه‌حل: پنجره‌های File Explorer را ببندید و در CMD دستور `net use * /delete /y` را بزنید (یا یک بار از ویندوز خارج و دوباره وارد شوید). برای استفادهٔ هم‌زمان از دو کاربر، یکی را با آدرس IP (`\\192.168.1.1\ali`) و دیگری را با نام روتر (`\\OpenWrt.lan\ali2`) باز کنید.
+
+### اندروید با CX File Explorer
+
+برای اندروید برنامهٔ **CX File Explorer** را پیشنهاد می‌کنیم (رایگان، از Google Play):
+
+1. برنامهٔ **CX File Explorer** را نصب و باز کنید.
+2. زبانهٔ **NETWORK** را بزنید.
+3. گزینهٔ **New location** را بزنید.
+4. **Remote** و سپس **SAMBA** را انتخاب کنید (SAMBA همان SMB است؛ پروتکل اشتراک فایل ویندوز).
+5. در قسمت **Host** آدرس IP روتر را بدهید (مثلاً `192.168.1.1`؛ آدرس روتر خودتان را بگذارید).
+6. تیک **Anonymous** را بردارید و در **Username** و **Password** همان نام کاربری و رمزی را که در مخزن ساخته‌اید وارد کنید.
+7. **OK** را بزنید تا وصل شوید. پوشهٔ خصوصی شما، **Media** و **Shared** نمایش داده می‌شوند.
+
+برای فرستادن عکس یا فیلم از گوشی: فایل را در حافظهٔ گوشی لمس طولانی کنید ← **Copy** ← به همین مکان شبکه بروید ← پوشهٔ مقصد را باز کنید ← **Paste**. اتصال ذخیره می‌شود و دفعهٔ بعد فقط کافی است از زبانهٔ NETWORK آن را باز کنید.
 
 ## امنیت
 
@@ -306,13 +338,54 @@ apk del luci-app-makhzan        # OpenWrt 25.12+
 opkg remove luci-app-makhzan    # OpenWrt 24.10 and older
 ```
 
-Removal deletes Makhzan's SMB shares, removes the access-based-enumeration and unix-extensions lines from the Samba template (the Samba password database stays on `tdbsam` so no password is lost) and disables MiniDLNA if Makhzan enabled it. Your files, user accounts with their passwords and the fstab mount entries are kept on purpose; reinstalling restores everything automatically. Note: `apk del` also removes dependencies that were installed with Makhzan (such as `block-mount`), which cleanly unmounts the USB disk; run `apk add block-mount e2fsprogs` first if the disk should stay mounted. See the Persian section for optional full-cleanup commands.
+Removal deletes Makhzan's SMB shares, removes the settings Makhzan added to the Samba template except `tdbsam` (the password database stays, so no password is lost) and disables MiniDLNA if Makhzan enabled it. Your files, user accounts with their passwords and the fstab mount entries are kept on purpose; reinstalling restores everything automatically. Note: `apk del` also removes dependencies that were installed with Makhzan (such as `block-mount`), which cleanly unmounts the USB disk; run `apk add block-mount e2fsprogs` first if the disk should stay mounted. See the Persian section for optional full-cleanup commands.
 
 ## Quick start
 
-Windows connects to a server as only one user at a time: after logging in as one user, it will not ask again and another user's private folder will not open. Close File Explorer and run `net use * /delete /y` (or sign out of Windows) to switch users, or use the IP address for one user and the router name (`\OpenWrt.lan\user`) for another.
+1. Plug in the USB disk.
+2. In **USB disk allocation**, select the disk (press **Release disk** if it is in use), enable **File server · NAS**, press **Use all remaining**, then **Review plan** → type the disk name → **Erase and create**. This erases the disk; use **Existing storage** instead to keep an ext4 disk's files.
+3. Turn on **SMB** (and **MiniDLNA** for TVs).
+4. **Add user**.
+5. Connect (see below).
 
-1. Plug in the USB disk. 2. In **USB disk allocation**, select the disk (press **Release disk** if it is in use), enable **File server · NAS**, press **Use all remaining**, then **Review plan** → type the disk name → **Erase and create** (this erases the disk; use **Existing storage** instead to keep an ext4 disk's files). 3. Turn on **SMB**. 4. **Add user**. 5. Connect with `\\ROUTER\username`, `\\ROUTER\Shared`, `\\ROUTER\Media` (Windows) or `smb://ROUTER` (macOS, iOS, Linux, Android apps).
+## Folders: private, Shared and Media
+
+| Folder | Who can see it | Good for |
+|---|---|---|
+| **Private folder** (named after the user, e.g. `ali`) | **Only that user**, with their password. Other users do not even see its name. | Personal files, documents, phone backups |
+| **Shared** | **All Makhzan users**, with their own passwords (read and write) | Family files: documents, family photos, installers |
+| **Media** | **All Makhzan users** (read and write) **and every TV, VLC or other player on the home network through DLNA, without a password** (view/listen only) | Movies, series, music and photos to play on TVs |
+
+> ⚠️ **Important:** DLNA has no password. Every device on your Wi-Fi, including guests' phones, can see what is in **Media**. **Never put ID cards, documents or personal files in Media**; keep them in your private folder (or in Shared if the whole family needs them).
+
+Media is a separate share next to your private folder — do not create a "Media" folder inside your private folder (it would stay private and never reach the TV). Files copied into Media appear in the DLNA library automatically after a few seconds.
+
+## Connect
+
+Use your router's address instead of `192.168.1.1` and the username/password created in Makhzan.
+
+| Device | How |
+|---|---|
+| **Windows** | File Explorer: `\192.168.1.1\ali` (private), `\192.168.1.1\Shared`, `\192.168.1.1\Media`. To keep it: right-click This PC → **Map network drive**. |
+| **Android** | **CX File Explorer** — step by step below |
+| **iPhone / iPad** | **Files** app → ⋯ → **Connect to Server** → `smb://192.168.1.1` |
+| **macOS** | Finder → **Go → Connect to Server** → `smb://192.168.1.1` |
+| **Linux** | File manager → `smb://192.168.1.1/ali` |
+| **TV** | With MiniDLNA on, the TV lists a media server named **Makhzan** |
+
+**Android with CX File Explorer** (free, Google Play):
+
+1. Install and open **CX File Explorer**.
+2. Open the **NETWORK** tab.
+3. Tap **New location**.
+4. Choose **Remote** → **SAMBA** (Samba is the SMB file-sharing protocol).
+5. **Host:** your router's IP address (for example `192.168.1.1`).
+6. Untick **Anonymous** and enter the **Username** and **Password** created in Makhzan.
+7. Tap **OK** to connect: your private folder, **Media** and **Shared** appear.
+
+To send photos or videos from the phone: long-press the file → **Copy** → open the network location → open the target folder → **Paste**. The connection is saved in the NETWORK tab.
+
+**Windows note:** Windows connects to a server as only one user at a time. After logging in as one user it will not ask again, and another user's private folder will not open. Close File Explorer and run `net use * /delete /y` (or sign out of Windows) to switch users, or use the IP address for one user and the router name (`\OpenWrt.lan\ali2`) for another.
 
 ## Limitations
 
