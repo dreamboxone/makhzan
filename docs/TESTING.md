@@ -47,3 +47,4 @@ minidlna 1.3.3, 16 GB USB flash drive. Client: Windows 11. Date: 2026-09-26.
 | SMB | VLC mDNS discovery lists only the user's own share plus Media and Shared | Pass |
 | DLNA | VLC Universal Plug'n'Play shows the "Makhzan" server with Browse Folders/Music/Pictures/Video; video listed and playable | Pass |
 | CI | GitHub Actions: apk and ipk installed and exercised on x86_64, aarch64 and armv7l OpenWrt containers | Pass |
+| SMB | Android (SMB file manager): lists only the user's share plus Media and Shared; upload to Media stored as ali:makhzan 0664 and indexed by DLNA automatically | Pass |
