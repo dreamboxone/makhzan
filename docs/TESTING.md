@@ -71,3 +71,4 @@ Same device, plus a second USB disk formatted NTFS on Windows (media library tes
 | UI | Card and plan accent bars follow the rounded corners (automated corner check on every tab, light and dark); tab bar has no scrollbar line on phones | Pass (UI preview) |
 | UI | Tab order Home, Disk, Users, Services, Remote access, Recovery trash; first visit without ready storage opens Disk; Home and Users show "prepare the disk" with a button to the Disk tab | Pass (UI preview) |
 | UI | With SMB off the Users tab offers "Turn on SMB" (creating a user with SMB off is refused by the backend) | Pass |
+| UI | Traced wordmark logo in the hero (white/cyan) and footer (indigo-violet/cyan, light variant in dark mode); README logo with light/dark variants; phone width without horizontal scroll | Pass (UI preview) |

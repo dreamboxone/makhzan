@@ -24,8 +24,12 @@
 /* Icons and logo */
 .mk-ico{display:inline-flex;width:18px;height:18px;flex:none;vertical-align:middle}
 .mk-ico svg{width:100%;height:100%}
-.mk-logo{display:inline-flex;flex:none;filter:drop-shadow(0 8px 16px #3b1f8f55)}
-.mk-logo svg{display:block}
+.mk-wordmark{display:inline-flex;flex:none;line-height:0}
+.mk-wordmark svg{display:block;max-width:100%;height:auto}
+.mk-wm-a{stop-color:#4f46e5}.mk-wm-b{stop-color:#9333ea}.mk-wm-accent{fill:#06b6d4}
+.mk-dark .mk-wm-a{stop-color:#c7d2fe}.mk-dark .mk-wm-b{stop-color:#e9d5ff}.mk-dark .mk-wm-accent{fill:#22d3ee}
+.mk-hero .mk-wm-main{fill:#fff}.mk-hero .mk-wm-accent{fill:#67e8f9}
+.mk-hero .mk-wordmark{filter:drop-shadow(0 8px 18px #1e1b4b59)}
 
 /* Hero */
 .mk-hero{position:relative;overflow:hidden;background:radial-gradient(circle at 12% 20%,#22d3ee55,transparent 40%),radial-gradient(circle at 90% 90%,#f472b666,transparent 45%),linear-gradient(120deg,#1e3a8a,#4f46e5 50%,#9333ea);

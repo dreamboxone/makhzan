@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
+    <img src="docs/logo.svg" alt="مخزن — Makhzan" width="300">
+  </picture>
+</p>
+
 <div dir="rtl">
 
 # مخزن (Makhzan)
