@@ -520,6 +520,17 @@ return view.extend({
 			});
 			if (!d.users.length) usersBox.appendChild(E('p', { 'class': 'mk-empty' }, [ icon('users'), t('هنوز کاربری ساخته نشده است.', 'No users yet.') ]));
 
+			/* Setup order: disk, then SMB, then users. Guide the next step right here instead of failing on "Add user". */
+			usersNote.replaceChildren();
+			if (!d.ready)
+				usersNote.appendChild(E('div', { 'class': 'mk-alert warn' }, [ icon('drive'), E('span', {}, t('قدم اول: دیسک USB را آماده کنید؛ بدون آن کاربر ساخته نمی‌شود.', 'First step: prepare the USB disk; users cannot be created without it.')),
+					btn(t('رفتن به زبانهٔ دیسک', 'Go to the Disk tab'), function() { showTab('disk'); }, 'warn mk-small', 'drive') ]));
+			else if (!s.samba_installed)
+				usersNote.appendChild(alertBox('warn', 'alert', t('برای ساخت کاربر بستهٔ samba4-server را از System ← Software نصب کنید.', 'Install samba4-server from System → Software to create users.')));
+			else if (!s.samba_enabled)
+				usersNote.appendChild(E('div', { 'class': 'mk-alert warn' }, [ icon('server'), E('span', {}, t('SMB خاموش است؛ برای ساخت کاربر و اتصال به فایل‌ها آن را روشن کنید.', 'SMB is off; turn it on to create users and reach the files.')),
+					btn(t('روشن کردن SMB', 'Turn on SMB'), function() { return call([ 'option', 'samba', '1' ]).then(function() { return call([ 'apply' ]); }).then(refresh); }, 'warn mk-small', 'check') ]));
+
 			tmCheck.checked = !!s.timemachine_enabled; tmCheck.disabled = !s.timemachine_supported || !s.samba_installed;
 			if (document.activeElement !== tmSize) tmSize.value = String(s.timemachine_gb || 0);
 			spinSelect.disabled = !s.spindown_supported;
@@ -696,7 +707,8 @@ return view.extend({
 		], '#10b981', 'pulse');
 
 		/* ---------- Users and trash ---------- */
-		var users = card(t('کاربران و پوشه‌ها', 'Users and folders'), [ btn(t('افزودن کاربر', 'Add user'), addUser, 'success', 'userPlus'), usersBox ], '#f59e0b', 'users');
+		var usersNote = E('div');
+		var users = card(t('کاربران و پوشه‌ها', 'Users and folders'), [ usersNote, btn(t('افزودن کاربر', 'Add user'), addUser, 'success', 'userPlus'), usersBox ], '#f59e0b', 'users');
 		var trashList = E('div', { 'class': 'mk-list mk-list-tall' });
 		function loadTrash() {
 			return call([ 'trash-list' ]).then(paintTrash).catch(function(e) { trashList.replaceChildren(alertBox('error', 'alert', msgOf(e))); });
@@ -866,7 +878,11 @@ return view.extend({
 		var usageCard = card(t('مصرف فضای فایل‌سرور', 'File server space usage'), [ usageBox ], '#3b82f6', 'pie');
 		function paintUsage(d) {
 			usageBox.replaceChildren();
-			if (!d.disk) { usageBox.appendChild(E('p', { 'class': 'mk-empty' }, [ icon('drive'), t('حافظه آماده نیست.', 'Storage is not ready.') ])); return; }
+			if (!d.disk) {
+				usageBox.append(E('p', { 'class': 'mk-empty' }, [ icon('drive'), t('حافظه آماده نیست. قدم اول: دیسک USB را در زبانهٔ «دیسک» آماده کنید.', 'Storage is not ready. First step: prepare the USB disk on the Disk tab.') ]),
+					btn(t('رفتن به زبانهٔ دیسک', 'Go to the Disk tab'), function() { showTab('disk'); }, 'primary', 'drive'));
+				return;
+			}
 			var u = d.usage, total = d.disk.total_kib || 1;
 			if (!u) { usageBox.appendChild(E('p', { 'class': 'mk-muted' }, t('در حال محاسبهٔ مصرف فضا…', 'Calculating space usage…'))); return; }
 			var rows = [];
@@ -885,7 +901,9 @@ return view.extend({
 
 		/* ---------- Tabs ---------- */
 		var tabBar = E('div', { 'class': 'mk-tabs', 'role': 'tablist' }), panels = {}, tabButtons = {}, loaders = {}, activeTab = 'home';
-		try { activeTab = localStorage.getItem('makhzan-tab') || 'home'; } catch (e) {}
+		/* Setup order is disk first: without a saved tab and without ready storage, open the Disk tab. */
+		if (!data.ready) activeTab = 'disk';
+		try { activeTab = localStorage.getItem('makhzan-tab') || activeTab; } catch (e) {}
 		function showTab(id) {
 			if (!panels[id]) id = 'home';
 			activeTab = id;
@@ -904,9 +922,9 @@ return view.extend({
 			if (loader) loaders[id] = loader;
 		}
 		addTab('home', t('خانه', 'Home'), 'home', [ metrics, usageCard ]);
+		addTab('disk', t('دیسک', 'Disk'), 'drive', [ planner, libraryCard, E('div', { 'class': 'mk-columns' }, [ maintenance, storageCard ]) ], loadLibrary);
 		addTab('users', t('کاربران', 'Users'), 'users', [ users ]);
 		addTab('services', t('سرویس‌ها', 'Services'), 'pulse', [ services ]);
-		addTab('disk', t('دیسک', 'Disk'), 'drive', [ planner, libraryCard, E('div', { 'class': 'mk-columns' }, [ maintenance, storageCard ]) ], loadLibrary);
 		addTab('remote', t('دسترسی از بیرون', 'Remote access'), 'globe', [ remoteCard ], loadRemote);
 		addTab('trash', t('سطل بازیابی', 'Recovery trash'), 'trash', [ trash ], loadTrash);
 

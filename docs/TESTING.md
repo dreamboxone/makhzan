@@ -69,3 +69,5 @@ Same device, plus a second USB disk formatted NTFS on Windows (media library tes
 | Remote | Turning remote access off removes the interface, peers and firewall rules | Pass |
 | UI | Tabs (Home, Users, Services, Disk, Remote access, Recovery trash), QR dialog, Light (sun) / Dark (moon) switch, Persian/English, phone width: no script errors, no horizontal scroll | Pass (UI preview) |
 | UI | Card and plan accent bars follow the rounded corners (automated corner check on every tab, light and dark); tab bar has no scrollbar line on phones | Pass (UI preview) |
+| UI | Tab order Home, Disk, Users, Services, Remote access, Recovery trash; first visit without ready storage opens Disk; Home and Users show "prepare the disk" with a button to the Disk tab | Pass (UI preview) |
+| UI | With SMB off the Users tab offers "Turn on SMB" (creating a user with SMB off is refused by the backend) | Pass |
