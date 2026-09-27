@@ -6,26 +6,31 @@
 # This program is free software: you can redistribute it and/or modify it under the terms
 # of the GNU General Public License version 3 as published by the Free Software Foundation.
 # It is distributed WITHOUT ANY WARRANTY; see the LICENSE file for details.
-# Whole-disk USB planner. Long operations run detached because rpcd limits command runtime.
+# USB disk operations: whole-disk planner, filesystem check and the read-only media library disk.
+# Long operations run detached because rpcd limits command runtime.
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 umask 077
 . /usr/libexec/makhzan-usb.sh || exit 1
 JOB=/var/run/makhzan-storage.json
 LOCK=/var/lock/makhzan-storage.lock
 NAS_WARN_MIB=1024
+LIB_TARGET=/mnt/makhzan-library
 MODE=foreground
+KIND=prepare
 json_job() { printf '%s\n' "$1" > "$JOB.tmp" && mv -f "$JOB.tmp" "$JOB"; }
 error() {
- if [ "$MODE" = job ]; then json_job "{\"state\":\"failed\",\"error\":\"$1\",\"finished\":$(date +%s)}"; fi
+ if [ "$MODE" = job ]; then json_job "{\"state\":\"failed\",\"kind\":\"$KIND\",\"error\":\"$1\",\"finished\":$(date +%s)}"; fi
  printf '{"ok":false,"error":"%s"}\n' "$1"; exit 1
 }
-step() { [ "$MODE" != job ] || json_job "{\"state\":\"running\",\"step\":\"$1\",\"started\":$started}"; }
+step() { [ "$MODE" != job ] || json_job "{\"state\":\"running\",\"kind\":\"$KIND\",\"step\":\"$1\",\"started\":$started}"; }
 uint() { case "$1" in ''|*[!0-9]*|0[0-9]*) return 1;; esac; [ ${#1} -le 9 ]; }
 usb() {
  case "$1" in /dev/sd[a-z]|/dev/sd[a-z][a-z]) ;; *) return 1;; esac
  makhzan_usb_device "$1" && [ ! -f "/sys/class/block/${1#/dev/}/partition" ]
 }
 uuid() { block info "$1" | sed -n 's/.* UUID="\([^"]*\)".*/\1/p'; }
+# One field (UUID, LABEL, TYPE) of a block device from block info.
+binfo() { block info "$1" 2>/dev/null | sed -n "s/.* $2=\"\([^\"]*\)\".*/\1/p"; }
 # Partitions of a whole disk that are mounted (prints "device mountpoint").
 disk_mounts() {
  awk -v d="$1" '$1==d || (index($1,d)==1 && substr($1,length(d)+1) ~ /^[0-9]+$/) {print $1, $2}' /proc/mounts
@@ -164,7 +169,7 @@ run() {
  fi
  sync
  reboot=false; [ -z "$ep" ] || reboot=true
- json_job "{\"state\":\"done\",\"ok\":true,\"reboot_required\":$reboot,\"unallocated_mib\":$free,\"finished\":$(date +%s)}"
+ json_job "{\"state\":\"done\",\"kind\":\"prepare\",\"ok\":true,\"reboot_required\":$reboot,\"unallocated_mib\":$free,\"finished\":$(date +%s)}"
 }
 preflight_locked() {
  plan "$1" "$2" "$3" "$4"
@@ -175,13 +180,158 @@ preflight_locked() {
 apply() {
  preflight "$@"
  mkdir "$LOCK" 2>/dev/null || error 'Another storage operation is running'
- json_job "{\"state\":\"running\",\"step\":\"checking\",\"started\":$(date +%s)}" || { rm -rf "$LOCK"; error 'Job state could not be written'; }
- if command -v setsid >/dev/null; then
-  setsid /usr/libexec/makhzan-storage run "$@" </dev/null >/dev/null 2>&1 &
- else
-  ( trap '' HUP INT TERM; exec /usr/libexec/makhzan-storage run "$@" ) </dev/null >/dev/null 2>&1 &
- fi
+ json_job "{\"state\":\"running\",\"kind\":\"prepare\",\"step\":\"checking\",\"started\":$(date +%s)}" || { rm -rf "$LOCK"; error 'Job state could not be written'; }
+ makhzan_spawn /usr/libexec/makhzan-storage run "$@"
  printf '{"ok":true,"started":true}\n'
+}
+
+# ---- Filesystem check: unmount the NAS, run e2fsck, mount it again ----
+svc_stop() { for svc in samba4 minidlna; do [ -x "/etc/init.d/$svc" ] && /etc/init.d/$svc stop >/dev/null 2>&1; done; }
+svc_start() { for svc in samba4 minidlna; do [ -x "/etc/init.d/$svc" ] && /etc/init.d/$svc enabled && /etc/init.d/$svc start >/dev/null 2>&1; done; }
+check_start() {
+ r=$(uci -q get makhzan.main.root)
+ makhzan_usb_mount "$r" || error 'USB storage is not ready'
+ case "$(awk -v m="$r" '$2==m {print $3; exit}' /proc/mounts)" in ext2|ext3|ext4) ;; *) error 'Only ext2, ext3 and ext4 disks can be checked';; esac
+ command -v e2fsck >/dev/null || error 'A required storage tool is missing'
+ clear_stale
+ mkdir "$LOCK" 2>/dev/null || error 'Another storage operation is running'
+ json_job "{\"state\":\"running\",\"kind\":\"check\",\"step\":\"unmounting\",\"started\":$(date +%s)}" || { rm -rf "$LOCK"; error 'Job state could not be written'; }
+ makhzan_spawn /usr/libexec/makhzan-storage run-check "$r"
+ printf '{"ok":true,"started":true}\n'
+}
+# Whatever happens, the NAS is mounted again and the services restarted before the job ends.
+check_cleanup() {
+ if [ -n "$cdev" ] && ! makhzan_mounted "$croot"; then mount -t "$cfs" -o "$copts" "$cdev" "$croot" 2>/dev/null; fi
+ svc_start
+ rm -rf "$LOCK"
+}
+run_check() {
+ MODE=job; KIND=check; started=$(date +%s)
+ [ -d "$LOCK" ] || error 'Storage job started without its lock'
+ echo $$ > "$LOCK/pid"
+ croot=$1; cdev=''
+ trap check_cleanup EXIT
+ makhzan_usb_mount "$croot" || error 'USB storage is not ready'
+ set -- $(awk -v m="$croot" '$2==m {print $1, $3, $4; exit}' /proc/mounts)
+ cdev=$1; cfs=$2; copts=$3
+ makhzan_usb_device "$cdev" || error 'Partition is not on a physical USB disk'
+ step unmounting
+ svc_stop; sync
+ tries=0
+ while makhzan_mounted "$croot"; do
+  umount "$croot" 2>/dev/null && break
+  tries=$((tries + 1)); [ "$tries" -lt 5 ] || error 'The disk is busy; close open files and try again'
+  sleep 2
+ done
+ step checking
+ log=/tmp/run/makhzan/fsck.log; mkdir -p /tmp/run/makhzan
+ e2fsck -f -p "$cdev" > "$log" 2>&1; rc=$?
+ # Preen mode stops on problems that need a decision; repair those automatically like a boot-time fsck -y.
+ if [ $((rc & 4)) -ne 0 ]; then e2fsck -f -y "$cdev" >> "$log" 2>&1; rc=$?; fi
+ if [ $((rc & 8)) -ne 0 ] || [ "$rc" -ge 16 ]; then result=failed
+ elif [ $((rc & 4)) -ne 0 ]; then result=errors
+ elif [ $((rc & 3)) -ne 0 ]; then result=repaired
+ else result=clean; fi
+ step mounting
+ mount -t "$cfs" -o "$copts" "$cdev" "$croot" || error 'The disk could not be mounted again; reconnect it'
+ makhzan_usb_mount "$croot" || error 'NAS USB mount verification failed'
+ svc_start
+ [ "$(uci -q get makhzan.main.enabled)" != 1 ] || /usr/sbin/makhzanctl apply >/dev/null 2>&1 || true
+ json_job "{\"state\":\"done\",\"kind\":\"check\",\"ok\":true,\"result\":\"$result\",\"code\":$rc,\"finished\":$(date +%s)}"
+}
+
+# ---- Media library: an existing USB partition (NTFS, exFAT, FAT or ext) shared read-only ----
+lib_fail() { svc_start; error "$1"; }
+lib_umount() {
+ tries=0
+ while makhzan_mounted "$1"; do
+  umount "$1" 2>/dev/null && return 0
+  tries=$((tries + 1)); [ "$tries" -lt 5 ] || return 1
+  sleep 1
+ done
+ return 0
+}
+lib_fstype() { case "$1" in ntfs) echo ntfs3;; exfat) echo exfat;; vfat) echo vfat;; ext2|ext3|ext4) echo "$1";; *) return 1;; esac; }
+lib_package() { case "$1" in ntfs) echo kmod-fs-ntfs3;; exfat) echo kmod-fs-exfat;; vfat) echo kmod-fs-vfat;; *) echo kmod-fs-ext4;; esac; }
+lib_driver() {
+ grep -qw "$1" /proc/filesystems && return 0
+ modprobe "$1" >/dev/null 2>&1 || insmod "$1" >/dev/null 2>&1
+ grep -qw "$1" /proc/filesystems
+}
+# BusyBox tr has no character classes; sed strips control characters, quotes and backslashes for JSON.
+lib_label() { binfo "$1" LABEL | sed 's/[[:cntrl:]"\\]//g'; }
+# Partitions Makhzan itself uses (NAS, extroot, swap) are never offered as a library.
+lib_reserved() {
+ for sec in makhzan_nas makhzan_extroot makhzan_swap; do [ "$(uci -q get "fstab.$sec.uuid")" = "$1" ] && return 0; done
+ nas_src=$(awk -v m="$(uci -q get makhzan.main.root)" '$2==m {print $1; exit}' /proc/mounts)
+ [ -n "$nas_src" ] && [ "$(uuid "$nas_src")" = "$1" ]
+}
+library_candidates() {
+ cur=$(uci -q get fstab.makhzan_library.uuid)
+ printf '{"ok":true,"current":'
+ if [ -n "$cur" ]; then
+  printf '{"uuid":"%s","label":"%s","type":"%s","mounted":%s}' "$cur" "$(uci -q get makhzan.main.library_label | tr -d '"\\')" "$(uci -q get fstab.makhzan_library.fstype)" "$(makhzan_mounted "$LIB_TARGET" && echo true || echo false)"
+ else printf null; fi
+ printf ',"candidates":['; sep=''
+ for sys in /sys/class/block/sd*; do
+  [ -f "$sys/partition" ] || continue; dev=/dev/${sys##*/}
+  makhzan_usb_device "$dev" || continue
+  type=$(binfo "$dev" TYPE); fst=$(lib_fstype "$type") || continue
+  u=$(binfo "$dev" UUID); [ -n "$u" ] || continue
+  [ "$u" != "$cur" ] || continue
+  lib_reserved "$u" && continue
+  where=$(awk -v d="$dev" '$1==d {print $2; exit}' /proc/mounts)
+  case "$where" in /|/overlay|/rom/overlay) continue;; esac
+  drv=false; grep -qw "$fst" /proc/filesystems && drv=true
+  [ "$drv" = true ] || { [ -n "$(find "/lib/modules/$(uname -r)" -name "$fst.ko" 2>/dev/null | head -n 1)" ] && drv=true; }
+  printf '%s{"dev":"%s","uuid":"%s","label":"%s","type":"%s","size_mib":%s,"mounted_at":"%s","driver":%s,"package":"%s"}' "$sep" "$dev" "$u" "$(lib_label "$dev")" "$type" "$(( $(cat "$sys/size") / 2048 ))" "$where" "$drv" "$(lib_package "$type")"; sep=,
+ done
+ printf ']}\n'
+}
+library_set() {
+ u=$1
+ printf '%s' "$u" | grep -Eq '^[A-Za-z0-9-]{1,64}$' || error 'Partition not found'
+ dev=$(block info 2>/dev/null | awk -v u="UUID=\"$u\"" 'index($0, u) {sub(/:.*/, ""); print; exit}')
+ [ -n "$dev" ] && makhzan_usb_device "$dev" && [ -f "/sys/class/block/${dev#/dev/}/partition" ] || error 'Partition not found'
+ lib_reserved "$u" && error 'This partition is already used by Makhzan'
+ type=$(binfo "$dev" TYPE); fst=$(lib_fstype "$type") || error 'Unsupported filesystem for the media library'
+ lib_driver "$fst" || error 'The kernel driver for this filesystem is not installed'
+ makhzan_group || error 'Cannot create group'
+ gid=$(awk -F: '$1=="makhzan" {print $3; exit}' /etc/group)
+ # Read-only; FAT-family disks get group makhzan and world-readable modes so MiniDLNA can read them.
+ case "$fst" in
+  ntfs3|exfat) opts="ro,noatime,uid=0,gid=$gid,fmask=0133,dmask=0022";;
+  vfat) opts="ro,noatime,uid=0,gid=$gid,fmask=0133,dmask=0022,utf8";;
+  *) opts="ro,noatime";;
+ esac
+ clear_stale
+ [ ! -d "$LOCK" ] || error 'Another storage operation is running'
+ where=$(awk -v d="$dev" '$1==d {print $2; exit}' /proc/mounts)
+ case "$where" in /|/overlay|/rom/overlay) error 'This partition is already used by Makhzan';; esac
+ # Samba and MiniDLNA keep files open; stop them while the previous library and any automatic mount of
+ # the chosen partition are released.
+ svc_stop; sync
+ lib_umount "$LIB_TARGET" || lib_fail 'A partition is still in use; close open files and retry'
+ [ -z "$where" ] || [ "$where" = "$LIB_TARGET" ] || lib_umount "$where" || lib_fail 'A partition is still in use; close open files and retry' 
+ uci -q delete fstab.makhzan_library
+ uci set fstab.makhzan_library=mount; uci set fstab.makhzan_library.uuid="$u"; uci set fstab.makhzan_library.target="$LIB_TARGET"
+ uci set fstab.makhzan_library.fstype="$fst"; uci set fstab.makhzan_library.options="$opts"; uci set fstab.makhzan_library.enabled=1
+ uci commit fstab || error 'Mount configuration save failed'
+ mkdir -p "$LIB_TARGET"
+ mount -t "$fst" -o "$opts" "$dev" "$LIB_TARGET" || lib_fail 'The media library disk could not be mounted'
+ uci set makhzan.main.library_uuid="$u"; uci set makhzan.main.library_label="$(lib_label "$dev")"; uci commit makhzan
+ svc_start
+ printf '{"ok":true}\n'
+}
+library_off() {
+ if makhzan_mounted "$LIB_TARGET"; then
+  svc_stop; sync
+  lib_umount "$LIB_TARGET" || lib_fail 'A partition is still in use; close open files and retry'
+  svc_start
+ fi
+ uci -q delete fstab.makhzan_library; uci commit fstab
+ uci -q delete makhzan.main.library_uuid; uci -q delete makhzan.main.library_label; uci commit makhzan
+ printf '{"ok":true}\n'
 }
 # Stop using a USB disk so it can be unplugged or re-partitioned. Active extroot cannot be released.
 release() {
@@ -210,7 +360,7 @@ lock_state() {
 clear_stale() {
  case "$(lock_state)" in dead) rm -rf "$LOCK";; alive) return 0;; esac
  if grep -q '"state":"running"' "$JOB" 2>/dev/null; then
-  json_job "{\"state\":\"failed\",\"error\":\"Disk preparation was interrupted\",\"finished\":$(date +%s)}"
+  json_job "{\"state\":\"failed\",\"error\":\"The disk operation was interrupted\",\"finished\":$(date +%s)}"
  fi
 }
 job_status() {
@@ -224,5 +374,10 @@ case "$1" in
  run) shift; run "$@";;
  release) release "$2";;
  job) job_status;;
+ check) check_start;;
+ run-check) run_check "$2";;
+ library-list) library_candidates;;
+ library-set) library_set "$2";;
+ library-off) library_off;;
  *) error 'Unknown storage action';;
 esac

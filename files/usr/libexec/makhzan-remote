@@ -1,0 +1,157 @@
+#!/bin/sh
+# Makhzan - USB NAS manager for OpenWrt
+# Copyright (C) 2026 dreamboxone
+# SPDX-License-Identifier: GPL-3.0-only
+#
+# This program is free software: you can redistribute it and/or modify it under the terms
+# of the GNU General Public License version 3 as published by the Free Software Foundation.
+# It is distributed WITHOUT ANY WARRANTY; see the LICENSE file for details.
+# Remote access to the NAS through a dedicated WireGuard interface and firewall zone. Through the tunnel
+# only SMB (TCP 445) on the router is reachable; the LAN and the router's other services are not.
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+umask 077
+. /usr/libexec/makhzan-usb.sh || exit 1
+
+IFACE=makhzan_wg
+ZONE=makhzan_wg
+PEER_TYPE=wireguard_makhzan_wg
+SUBNETS='10.212.0 10.213.0 172.31.212'
+
+ok() { printf '{"ok":true%s}\n' "$1"; }
+fail() { printf '{"ok":false,"error":"%s"}\n' "$1"; exit 1; }
+# Keys (base64), addresses and validated host names contain no quotes or backslashes; only newlines need escaping.
+json_text() { awk 'BEGIN { ORS = "" } { print (NR > 1 ? "\\n" : "") $0 }'; }
+valid_user() { printf '%s' "$1" | grep -Eq '^[a-z][a-z0-9_-]{0,30}$' && [ "$(printf '%s' "$1" | wc -l)" -eq 0 ]; }
+
+installed() { command -v wg >/dev/null && [ -e /lib/netifd/proto/wireguard.sh ]; }
+enabled() { [ "$(uci -q get "network.$IFACE.proto")" = wireguard ]; }
+managed_user() { awk -F: -v u="$1" '$1==u && $3>=1000 && $5=="makhzan" && $7=="/bin/false" {f=1} END {exit !f}' /etc/passwd; }
+iface_ip() { ( . /lib/functions/network.sh; network_get_ipaddr ip "$1"; echo "$ip" ); }
+# RFC 1918, CGNAT (100.64/10) or missing: the router cannot be reached from the internet without help.
+is_private() {
+	case "$1" in
+		''|10.*|192.168.*|172.1[6-9].*|172.2[0-9].*|172.3[01].*) return 0;;
+		100.6[4-9].*|100.[7-9][0-9].*|100.1[01][0-9].*|100.12[0-7].*) return 0;;
+	esac
+	return 1
+}
+pick_subnet() {
+	for n in $SUBNETS; do
+		ip -4 addr 2>/dev/null | grep -q " inet $n\." && continue
+		ip -4 route 2>/dev/null | grep -q "^$n\." && continue
+		echo "$n"; return 0
+	done
+	return 1
+}
+valid_endpoint() { printf '%s' "$1" | grep -Eq '^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$' && [ "$(printf '%s' "$1" | wc -l)" -eq 0 ]; }
+valid_port() { case "$1" in ''|*[!0-9]*) return 1;; esac; [ ${#1} -le 5 ] && [ "$1" -ge 1024 ] && [ "$1" -le 65535 ]; }
+peer_section() { uci -q show network | sed -n "s/^network\.\([^.]*\)\.makhzan_user='$1'\$/\1/p" | head -n 1; }
+peer_sections() { uci -q show network | sed -n "s/^network\.\([^.=]*\)=$PEER_TYPE\$/\1/p"; }
+# netifd applies WireGuard peers when the interface is (re)started.
+reload_net() { ubus call network reload >/dev/null 2>&1; ! enabled || ifup "$IFACE" >/dev/null 2>&1; }
+reload_fw() { /etc/init.d/firewall reload >/dev/null 2>&1; }
+
+status() {
+	lan=$(iface_ip lan); wan=$(iface_ip wan)
+	wan_private=false; is_private "$wan" && wan_private=true
+	printf '{"ok":true,"installed":%s,"enabled":%s,"endpoint":"%s","port":%s,"lan_ip":"%s","wan_ip":"%s","wan_private":%s,"peers":[' \
+		"$(installed && echo true || echo false)" "$(enabled && echo true || echo false)" \
+		"$(uci -q get makhzan.main.remote_endpoint)" "$(uci -q get makhzan.main.remote_port || echo 51820)" "$lan" "$wan" "$wan_private"
+	hs=$(wg show "$IFACE" latest-handshakes 2>/dev/null)
+	sep=''
+	for sec in $(peer_sections); do
+		u=$(uci -q get "network.$sec.makhzan_user"); [ -n "$u" ] || continue
+		pub=$(uci -q get "network.$sec.public_key")
+		addr=$(uci -q get "network.$sec.allowed_ips" | awk '{sub(/\/.*/, "", $1); print $1}')
+		t=$(printf '%s\n' "$hs" | awk -v k="$pub" '$1==k {print $2; exit}')
+		printf '%s{"user":"%s","ip":"%s","handshake":%s}' "$sep" "$u" "$addr" "${t:-0}"; sep=,
+	done
+	printf ']}\n'
+}
+enable() {
+	ep=$1; port=${2:-51820}
+	installed || fail 'WireGuard is not installed'
+	valid_endpoint "$ep" || fail 'Enter the public IP address or DDNS name of the router'
+	valid_port "$port" || fail 'Port must be between 1024 and 65535'
+	if ! enabled; then
+		net=$(pick_subnet) || fail 'No free address range for remote access'
+		key=$(wg genkey) && [ -n "$key" ] || fail 'WireGuard key could not be created'
+		uci -q delete "network.$IFACE"
+		uci set "network.$IFACE=interface"; uci set "network.$IFACE.proto=wireguard"
+		uci set "network.$IFACE.private_key=$key"; uci add_list "network.$IFACE.addresses=$net.1/24"
+		uci set makhzan.main.remote_subnet="$net"
+	fi
+	uci set "network.$IFACE.listen_port=$port"
+	for sec in makhzan_wg makhzan_wg_smb makhzan_wg_ping makhzan_wg_port; do uci -q delete "firewall.$sec"; done
+	uci set firewall.makhzan_wg=zone; uci set firewall.makhzan_wg.name="$ZONE"; uci add_list firewall.makhzan_wg.network="$IFACE"
+	uci set firewall.makhzan_wg.input=REJECT; uci set firewall.makhzan_wg.output=ACCEPT; uci set firewall.makhzan_wg.forward=REJECT
+	uci set firewall.makhzan_wg_smb=rule; uci set firewall.makhzan_wg_smb.name=Makhzan-Remote-SMB; uci set firewall.makhzan_wg_smb.src="$ZONE"
+	uci set firewall.makhzan_wg_smb.proto=tcp; uci set firewall.makhzan_wg_smb.dest_port=445; uci set firewall.makhzan_wg_smb.target=ACCEPT
+	uci set firewall.makhzan_wg_ping=rule; uci set firewall.makhzan_wg_ping.name=Makhzan-Remote-Ping; uci set firewall.makhzan_wg_ping.src="$ZONE"
+	uci set firewall.makhzan_wg_ping.proto=icmp; uci set firewall.makhzan_wg_ping.icmp_type=echo-request; uci set firewall.makhzan_wg_ping.family=ipv4; uci set firewall.makhzan_wg_ping.target=ACCEPT
+	uci set firewall.makhzan_wg_port=rule; uci set firewall.makhzan_wg_port.name=Makhzan-Remote-WireGuard; uci set firewall.makhzan_wg_port.src=wan
+	uci set firewall.makhzan_wg_port.proto=udp; uci set firewall.makhzan_wg_port.dest_port="$port"; uci set firewall.makhzan_wg_port.target=ACCEPT
+	uci set makhzan.main.remote_endpoint="$ep"; uci set makhzan.main.remote_port="$port"
+	uci commit makhzan && uci commit network && uci commit firewall || fail 'Configuration save failed'
+	reload_net; reload_fw
+	ok
+}
+disable() {
+	for sec in $(peer_sections); do uci -q delete "network.$sec"; done
+	enabled && ifdown "$IFACE" >/dev/null 2>&1
+	uci -q delete "network.$IFACE"
+	for sec in makhzan_wg makhzan_wg_smb makhzan_wg_ping makhzan_wg_port; do uci -q delete "firewall.$sec"; done
+	uci -q delete makhzan.main.remote_subnet
+	uci commit network; uci commit firewall; uci commit makhzan
+	reload_net; reload_fw
+	ok
+}
+config() {
+	u=$1; sec=$(peer_section "$u"); [ -n "$sec" ] || fail 'This user has no remote access yet'
+	priv=$(uci -q get "network.$sec.private_key")
+	addr=$(uci -q get "network.$sec.allowed_ips" | awk '{sub(/\/.*/, "", $1); print $1}')
+	spub=$(uci -q get "network.$IFACE.private_key" | wg pubkey 2>/dev/null)
+	ep=$(uci -q get makhzan.main.remote_endpoint); port=$(uci -q get "network.$IFACE.listen_port")
+	lan=$(iface_ip lan)
+	[ -n "$priv" ] && [ -n "$addr" ] && [ -n "$spub" ] && [ -n "$lan" ] || fail 'Remote access configuration is incomplete'
+	# Only the router's LAN address is routed through the tunnel: the phone keeps its own internet.
+	text=$(printf '[Interface]\nPrivateKey = %s\nAddress = %s/32\n\n[Peer]\nPublicKey = %s\nEndpoint = %s:%s\nAllowedIPs = %s/32\nPersistentKeepalive = 25\n' \
+		"$priv" "$addr" "$spub" "$ep" "$port" "$lan" | json_text)
+	ok ",\"user\":\"$u\",\"lan_ip\":\"$lan\",\"config\":\"$text\""
+}
+add() {
+	u=$1
+	managed_user "$u" || fail 'Unknown Makhzan user'
+	enabled || fail 'Turn on remote access first'
+	if [ -z "$(peer_section "$u")" ]; then
+		net=$(uci -q get makhzan.main.remote_subnet); [ -n "$net" ] || fail 'Remote access configuration is incomplete'
+		taken=$(for sec in $(peer_sections); do uci -q get "network.$sec.allowed_ips"; done)
+		n=2; while [ "$n" -le 254 ] && printf '%s\n' "$taken" | grep -q "^$net\.$n/"; do n=$((n + 1)); done
+		[ "$n" -le 254 ] || fail 'No free address range for remote access'
+		priv=$(wg genkey); pub=$(printf '%s' "$priv" | wg pubkey 2>/dev/null)
+		[ -n "$priv" ] && [ -n "$pub" ] || fail 'WireGuard key could not be created'
+		sec=$(uci add network "$PEER_TYPE")
+		uci set "network.$sec.description=Makhzan $u"; uci set "network.$sec.makhzan_user=$u"
+		uci set "network.$sec.public_key=$pub"; uci set "network.$sec.private_key=$priv"
+		uci add_list "network.$sec.allowed_ips=$net.$n/32"; uci set "network.$sec.route_allowed_ips=0"
+		uci commit network || fail 'Configuration save failed'
+		reload_net
+	fi
+	config "$u"
+}
+remove() {
+	sec=$(peer_section "$1")
+	if [ -n "$sec" ]; then uci -q delete "network.$sec"; uci commit network; reload_net; fi
+	ok
+}
+
+case "$1" in add|config|remove) valid_user "$2" || fail 'Unknown Makhzan user';; esac
+case "$1" in
+	status) status;;
+	enable) enable "$2" "$3";;
+	disable) disable;;
+	add) add "$2";;
+	config) config "$2";;
+	remove) remove "$2";;
+	*) fail 'Unknown command';;
+esac

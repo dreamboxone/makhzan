@@ -17,10 +17,13 @@ Copyright © 2026 dreamboxone — منتشرشده با مجوز **GNU GPL نس�
 5. [راه‌اندازی قدم‌به‌قدم](#راهاندازی-قدمبهقدم)
 6. [پوشه‌ها: خصوصی، Shared و Media](#پوشهها-خصوصی-shared-و-media)
 7. [اتصال از دستگاه‌ها](#اتصال-از-دستگاهها) (ویندوز، اندروید با CX File Explorer، آیفون، تلویزیون)
-8. [امنیت](#امنیت)
-9. [محدودیت‌ها](#محدودیتها)
-10. [ساخت بسته از سورس](#ساخت-بسته-از-سورس)
-11. [مجوز](#مجوز)
+8. [دسترسی از بیرون خانه (WireGuard)](#دسترسی-از-بیرون-خانه-wireguard)
+9. [کتابخانهٔ رسانه (هارد NTFS یا exFAT موجود)](#کتابخانهٔ-رسانه-هارد-ntfs-یا-exfat-موجود)
+10. [Time Machine، کاربر فقط‌خواندنی و نگه‌داری دیسک](#time-machine-کاربر-فقطخواندنی-و-نگهداری-دیسک)
+11. [امنیت](#امنیت)
+12. [محدودیت‌ها](#محدودیتها)
+13. [ساخت بسته از سورس](#ساخت-بسته-از-سورس)
+14. [مجوز](#مجوز)
 
 ---
 
@@ -33,9 +36,15 @@ Copyright © 2026 dreamboxone — منتشرشده با مجوز **GNU GPL نس�
 - **قفل ورود:** بعد از **۴ رمز اشتباه**، حساب کاربر **۱۵ دقیقه** قفل می‌شود. مدیر می‌تواند قفل را زودتر باز کند.
 - **مدیریت کاربران:** افزودن، تغییر رمز، رفع قفل و حذف کاربر.
 - **مدیریت پوشه‌ها:** ساخت، تغییر نام و حذف پوشه‌های سطح اول هر کاربر (نام فارسی پشتیبانی می‌شود).
-- **سطل بازیابی:** پوشه‌های حذف‌شده و پوشهٔ کاربران حذف‌شده به سطل مدیر منتقل می‌شوند و تا خالی‌کردن سطل قابل بازیابی‌اند.
+- **سطل بازیابی:** پوشه‌های حذف‌شده و پوشهٔ کاربران حذف‌شده به سطل منتقل می‌شوند و با یک کلیک **بازیابی** یا برای همیشه حذف می‌شوند.
 - **آزادسازی امن دیسک** (جداکردن امن) قبل از کشیدن USB یا تقسیم دوبارهٔ آن.
-- **پخش رسانه (MiniDLNA)** برای پوشهٔ Media.
+- **پخش رسانه (DLNA)** برای پوشهٔ Media، با دکمهٔ «اسکن دوبارهٔ کتابخانهٔ DLNA».
+- **دسترسی از بیرون خانه با WireGuard:** هر کاربر یک QR کد می‌گیرد و از هر جای دنیا به‌صورت رمزنگاری‌شده به فایل‌هایش دسترسی دارد. از راه تونل فقط فایل‌سرور در دسترس است.
+- **کتابخانهٔ رسانه:** هارد یا فلش NTFS، exFAT یا FAT که از قبل فیلم و موسیقی دارد، **بدون پاک‌کردن** و فقط‌خواندنی در اشتراک Library و روی تلویزیون دیده می‌شود.
+- **Time Machine** برای پشتیبان‌گیری خودکار مک در پوشهٔ خصوصی هر کاربر.
+- **کاربر فقط‌خواندنی** (مثلاً برای بچه‌ها): Shared و Media را می‌بیند ولی تغییر نمی‌دهد.
+- **نگه‌داری دیسک:** بررسی و تعمیر فایل‌سیستم از داخل صفحه، و خاموش شدن خودکار هارد مکانیکی در بیکاری.
+- **نمودار مصرف فضا** (هر کاربر، Shared، Media، سطل) و **هشدار پر شدن دیسک** در ۹۰٪ و ۹۷٪.
 - رابط کاربری **فارسی و انگلیسی** با فونت وزیرمتن، **حالت روشن و تیره** و سازگار با موبایل.
 
 ## سازگاری و پیش‌نیازها
@@ -55,6 +64,9 @@ Copyright © 2026 dreamboxone — منتشرشده با مجوز **GNU GPL نس�
 
 - `samba4-server` — برای اشتراک فایل SMB (**برای فایل‌سرور لازم است**)
 - `minidlna` — برای پخش روی تلویزیون
+- `kmod-wireguard` و `wireguard-tools` — برای دسترسی از بیرون خانه
+- `kmod-fs-ntfs3`، `kmod-fs-exfat` یا `kmod-fs-vfat` — برای کتابخانهٔ رسانه روی هارد NTFS، exFAT یا FAT
+- `hd-idle` — برای خاموش شدن خودکار هارد مکانیکی
 
 ## نصب
 
@@ -149,13 +161,13 @@ rm -f /etc/config/makhzan
 ## راه‌اندازی قدم‌به‌قدم
 
 1. **وصل کردن USB:** فلش یا هارد را به روتر وصل کنید. در کارت «فلش / هارد USB» باید عدد ۱ ببینید.
-2. **آماده‌سازی دیسک** (بخش «تقسیم فضای دیسک USB»):
+2. **آماده‌سازی دیسک** (زبانهٔ **دیسک** ← بخش «تقسیم فضای دیسک USB»):
    - دیسک را از فهرست انتخاب کنید. اگر پیام «این دیسک در حال استفاده است» دیدید، دکمهٔ **آزادسازی دیسک** را بزنید.
    - گزینهٔ **فایل‌سرور · NAS** را روشن کنید و روی **همهٔ فضای باقی‌مانده** بزنید. اگر لازم دارید swap (مثلاً ۵۱۲ مگابایت) هم اضافه کنید.
    - **بررسی طرح و ادامه** ← نام دیسک (مثلاً `/dev/sda`) را تایپ کنید ← **پاک‌کردن و ساخت**.
    - ⚠️ **تمام اطلاعات آن دیسک پاک می‌شود.** اگر دیسک از قبل ext4 است و نمی‌خواهید پاک شود، به‌جای این مرحله از بخش «حافظهٔ آماده» استفاده کنید.
-3. **روشن کردن SMB:** در بخش «سرویس‌های شبکه» کلید **SMB** را روشن کنید.
-4. **ساخت کاربر:** **افزودن کاربر** ← نام انگلیسی کوچک (مثلاً `ali`) و رمز حداقل ۸ نویسه.
+3. **روشن کردن SMB:** در زبانهٔ **سرویس‌ها** کلید **SMB** را روشن کنید.
+4. **ساخت کاربر:** زبانهٔ **کاربران** ← **افزودن کاربر** ← نام انگلیسی کوچک (مثلاً `ali`) و رمز حداقل ۸ نویسه.
 5. **اتصال** از دستگاه‌ها (بخش بعد).
 6. (اختیاری) کلید **DLNA** را روشن کنید تا فیلم‌های پوشهٔ Media روی تلویزیون دیده شوند.
 
@@ -205,10 +217,48 @@ rm -f /etc/config/makhzan
 
 برای فرستادن عکس یا فیلم از گوشی: فایل را در حافظهٔ گوشی لمس طولانی کنید ← **Copy** ← به همین مکان شبکه بروید ← پوشهٔ مقصد را باز کنید ← **Paste**. اتصال ذخیره می‌شود و دفعهٔ بعد فقط کافی است از زبانهٔ NETWORK آن را باز کنید.
 
+## دسترسی از بیرون خانه (WireGuard)
+
+با این قابلیت، کاربران از بیرون خانه (اینترنت همراه، محل کار، سفر) به‌صورت **رمزنگاری‌شده** به فایل‌هایشان وصل می‌شوند. هر کاربر یک **QR کد** مخصوص خودش می‌گیرد.
+
+**پیش‌نیازها:**
+- بسته‌های `kmod-wireguard` و `wireguard-tools` (از **System ← Software**).
+- روتر باید از اینترنت قابل دسترس باشد: **IP عمومی** یا یک نام **DDNS**. اگر روتر پشت مودم دیگری است (آدرس WAN آن مثل `192.168.x.x` است)، در مودم اصلی پورت **UDP 51820** را به آدرس WAN روتر **فوروارد** کنید.
+- اگر اینترنت شما IP عمومی ندارد (**CGNAT**)، این قابلیت کار نمی‌کند.
+
+**راه‌اندازی:**
+1. زبانهٔ **دسترسی از بیرون** ← آدرس عمومی روتر (IP یا DDNS) و پورت را وارد کنید ← **روشن کردن دسترسی از بیرون**.
+2. کنار هر کاربر **ساخت دسترسی و QR** را بزنید.
+3. روی گوشی برنامهٔ **WireGuard** را نصب کنید (Google Play یا App Store؛ برای ویندوز و مک از wireguard.com).
+4. در برنامه **+** ← **Scan from QR code** را بزنید و QR را اسکن کنید (یا فایل تنظیمات را وارد کنید)، سپس تونل را روشن کنید.
+5. حالا مثل خانه وصل شوید: در CX File Explorer یا Files به `smb://192.168.1.1` (آدرس LAN روتر شما) و در ویندوز به `\\192.168.1.1\ali`.
+
+**امنیت:** از راه تونل **فقط فایل‌سرور (SMB)** در دسترس است؛ صفحهٔ مدیریت روتر، SSH و بقیهٔ شبکهٔ خانه بسته می‌مانند. QR کد مثل رمز است؛ اگر گوشی گم شد، کنار آن کاربر **لغو دسترسی** را بزنید. **خاموش کردن** دسترسی از بیرون همهٔ QR ها را باطل و پورت را می‌بندد.
+
+## کتابخانهٔ رسانه (هارد NTFS یا exFAT موجود)
+
+اگر یک هارد یا فلش پر از فیلم و موسیقی دارید (معمولاً NTFS یا exFAT از ویندوز)، لازم نیست آن را پاک کنید:
+
+1. درایور فایل‌سیستم را نصب کنید: `kmod-fs-ntfs3` برای NTFS، `kmod-fs-exfat` برای exFAT یا `kmod-fs-vfat` برای FAT32.
+2. هارد را به روتر وصل کنید (از طریق هاب USB اگر فلش فایل‌سرور هم وصل است).
+3. زبانهٔ **دیسک** ← **کتابخانهٔ رسانه** ← کنار هارد **استفاده به‌عنوان کتابخانه** را بزنید.
+
+محتوای آن **فقط‌خواندنی** در اشتراک **Library** (برای همهٔ کاربران مخزن) و در **DLNA** تلویزیون دیده می‌شود و فایل‌های روی آن تغییر نمی‌کنند. پوشهٔ خصوصی روی این دیسک ساخته نمی‌شود.
+
+## Time Machine، کاربر فقط‌خواندنی و نگه‌داری دیسک
+
+- **Time Machine (مک):** در زبانهٔ **سرویس‌ها** کلید Time Machine را روشن کنید و در صورت نیاز سقف حجم هر کاربر (GB) را بدهید. در مک: **System Settings ← Time Machine ← Add Backup Disk** و پوشهٔ خصوصی خودتان را انتخاب کنید. پشتیبان هر مک در پوشهٔ خصوصی صاحبش می‌ماند.
+- **کاربر فقط‌خواندنی:** هنگام ساخت کاربر گزینهٔ **فقط خواندنی** را بزنید یا بعداً دکمهٔ **فقط خواندنی** کنار کاربر را بزنید. این کاربر Shared و Media را فقط می‌بیند و نمی‌تواند چیزی را پاک یا عوض کند؛ پوشهٔ خصوصی خودش عادی است. برای بچه‌ها مناسب است.
+- **بررسی و تعمیر دیسک:** بعد از قطع ناگهانی برق یا جدا شدن USB بدون «آزادسازی»، در زبانهٔ **دیسک ← نگه‌داری دیسک** دکمهٔ **بررسی و تعمیر دیسک** را بزنید. اشتراک‌ها چند دقیقه قطع می‌شوند و نتیجه (سالم، تعمیرشده یا نیاز به تعویض دیسک) نمایش داده می‌شود.
+- **خاموش شدن خودکار هارد:** برای هارد مکانیکی، بستهٔ `hd-idle` را نصب کنید و مدت بیکاری را انتخاب کنید تا صدا، مصرف برق و فرسودگی کم شود. برای فلش لازم نیست.
+- **سطل بازیابی:** در زبانهٔ **سطل بازیابی** هر مورد را **بازیابی** کنید (به پوشهٔ خصوصی صاحبش برمی‌گردد) یا برای همیشه حذف کنید. پوشهٔ کاربر حذف‌شده را بعد از ساختن دوبارهٔ کاربری با همان نام می‌توانید بازیابی کنید.
+
 ## امنیت
 
 - هر کاربر فقط اشتراک خصوصی خودش را می‌بیند (اشتراک‌های دیگران در فهرست نمایش داده نمی‌شوند) و به پوشهٔ دیگران دسترسی ندارد (مجوز پوشه `0700`).
 - ورود مهمان غیرفعال است و Samba فقط روی شبکهٔ داخلی (LAN) کار می‌کند.
+- دسترسی از بیرون فقط از راه تونل رمزنگاری‌شدهٔ WireGuard است؛ هر کاربر کلید جداگانه دارد که قابل لغو است، و از راه تونل فقط پورت SMB (445) باز است. پورت SMB هرگز روی اینترنت باز نمی‌شود.
+- کتابخانهٔ رسانه فقط‌خواندنی وصل می‌شود؛ هیچ کاربری نمی‌تواند فایل‌های آن دیسک را تغییر دهد یا پاک کند.
 - بعد از ۴ رمز اشتباه، حساب ۱۵ دقیقه قفل می‌شود (خطای 1909 در ویندوز).
 - رمزها هرگز در خط فرمان منتقل نمی‌شوند؛ از طریق یک فایل یک‌بارمصرف که فقط root می‌خواند و بلافاصله پاک می‌شود.
 - ساخت پیوند نمادین (symlink) از طریق SMB غیرفعال است و عملیات پوشه‌ها پیوندها را دنبال نمی‌کنند.
@@ -226,7 +276,7 @@ rm -f /etc/config/makhzan
 - حداقل اندازه‌ها: extroot حدود ۱۳۴، swap حدود ۱۷ و NAS حدود ۳۴ مگابایت. ۱۶ مگابایت برای جدول پارتیشن کنار گذاشته می‌شود.
 - در هر زمان فقط **یک** دیسک به‌عنوان NAS فعال است.
 - سهمیهٔ فضا (quota) برای کاربران وجود ندارد؛ هر کاربر می‌تواند تا پرشدن دیسک فایل بریزد.
-- محاسبهٔ حجم مصرفی هر کاربر روی دیسک‌های خیلی پر ممکن است چند ثانیه طول بکشد.
+- مصرف فضای هر کاربر و پوشه هر ۵ دقیقه یک بار محاسبه می‌شود؛ تغییرات با کمی تأخیر در نمودار دیده می‌شوند.
 
 **extroot**
 - بعد از آماده‌شدن extroot باید روتر را **ریبوت** کنید.
@@ -238,23 +288,30 @@ rm -f /etc/config/makhzan
 - تنظیم قفل ورود در RAM نگه‌داری می‌شود و در هر بوت دوباره اعمال می‌شود؛ در چند ثانیهٔ اول بوت (قبل از اجرای مخزن) قفل فعال نیست.
 - زمان قفل با ساعت روتر محاسبه می‌شود؛ روتر باید ساعت درست (NTP) داشته باشد.
 - قفل ورود فقط روی SMB اعمال می‌شود (رمز ورود LuCI و SSH جداست).
-- فقط **SMB2 و SMB3** (ویندوز قدیمی XP پشتیبانی نمی‌شود). دسترسی فقط از **LAN** است؛ برای دسترسی از اینترنت از VPN (مثل WireGuard) استفاده کنید. پورت SMB را هرگز روی اینترنت باز نکنید.
+- فقط **SMB2 و SMB3** (ویندوز قدیمی XP پشتیبانی نمی‌شود). دسترسی مستقیم فقط از **LAN** است؛ برای دسترسی از اینترنت از قابلیت **دسترسی از بیرون (WireGuard)** استفاده کنید. پورت SMB را هرگز روی اینترنت باز نکنید.
 - نام کاربری فقط حروف کوچک انگلیسی، عدد، `_` و `-` (حداکثر ۳۱ نویسه). نام‌های `shared`، `media`، `homes`، `root` و `admin` رزرو شده‌اند.
 
 **پوشه‌ها و سطل بازیابی**
 - رابط وب فقط **پوشه‌های سطح اول** کاربر را مدیریت می‌کند؛ کار با فایل‌ها و زیرپوشه‌ها از طریق SMB انجام می‌شود.
 - نام پوشه نمی‌تواند شامل `/ \ : * ? " < > |` باشد یا با نقطه/فاصله تمام شود (محدودیت ویندوز).
 - فایل‌هایی که کاربر از طریق SMB پاک می‌کند **به سطل نمی‌روند** و مستقیم حذف می‌شوند. سطل فقط برای حذف از طریق رابط مخزن است.
-- بازیابی از سطل با SSH انجام می‌شود (پوشهٔ `.makhzan-trash` روی دیسک NAS).
+- بازیابی، مورد را به پوشهٔ خصوصی صاحب اصلی برمی‌گرداند؛ اگر آن کاربر حذف شده باشد، ابتدا کاربری با همان نام بسازید.
 
 **DLNA و پوشه‌ها**
 - **DLNA رمز ندارد:** هر دستگاهی در شبکهٔ داخلی می‌تواند محتوای پوشهٔ `Media` را ببیند. فایل خصوصی را در Media نگذارید.
-- پوشه‌های `Shared` و `Media` برای **همهٔ کاربران** قابل خواندن و نوشتن‌اند.
+- پوشه‌های `Shared` و `Media` برای **همهٔ کاربران** قابل خواندن و نوشتن‌اند (به‌جز کاربران فقط‌خواندنی که فقط می‌خوانند).
 
 **سخت‌افزار**
 - سرعت به پورت USB و پردازندهٔ روتر بستگی دارد؛ روی روترهای USB 2.0 معمولاً ۱۵ تا ۳۰ مگابایت بر ثانیه. برای پشتیبان‌گیری خانگی و پخش فیلم مناسب است، نه RAID یا ویرایش ویدیوی سنگین.
 - قبل از کشیدن USB حتماً **آزادسازی دیسک** را بزنید تا اطلاعات خراب نشود.
 - **آداپتور برق استاندارد روتر** را استفاده کنید (برای Google WiFi: USB-C با ۵ ولت و ۳ آمپر، یعنی ۱۵ وات). آداپتور ضعیف (مثلاً ۱ آمپر) همراه با فلش یا هارد USB باعث ریبوت ناگهانی روتر (مخصوصاً هنگام بوت یا اتصال دستگاه‌های وای‌فای) و خراب‌شدن اطلاعات دیسک می‌شود. برای هارد ۲.۵ اینچی از هاب USB برق‌دار یا هارد با برق جداگانه استفاده کنید.
+
+**دسترسی از بیرون، کتابخانه و قابلیت‌های دیگر**
+- WireGuard به IP عمومی یا فوروارد پورت نیاز دارد و پشت CGNAT کار نمی‌کند. بعضی اینترنت‌ها ممکن است اتصال WireGuard را محدود کنند. آدرس عمومی فقط به‌صورت IPv4 یا نام DDNS پذیرفته می‌شود. **DLNA از راه تونل کار نمی‌کند** (فقط SMB).
+- کتابخانهٔ رسانه **فقط‌خواندنی** است، در هر زمان فقط **یک** دیسک کتابخانه دارد و همهٔ کاربران مخزن آن را می‌بینند (پوشهٔ خصوصی ندارد).
+- Time Machine در سطح تنظیمات Samba آزمایش شده است، نه با یک مک واقعی.
+- خاموش شدن خودکار فقط برای هارد مکانیکی معنا دارد و بعضی قاب‌های USB فرمان خاموشی را نادیده می‌گیرند.
+- بررسی دیسک فقط برای ext2/3/4 است و در طول بررسی اشتراک‌ها و DLNA قطع می‌شوند.
 
 **عمومی**
 - مدیر روتر (root) به همهٔ فایل‌ها دسترسی دارد.
@@ -307,13 +364,19 @@ Copyright © 2026 dreamboxone — licensed under the **GNU GPL version 3** — n
 - **Shared folders:** `Shared` for all users and `Media` for movies/music (DLNA streaming).
 - **Login lockout:** 4 wrong passwords lock the account for 15 minutes; the administrator can unlock earlier.
 - User management (add, change password, unlock, delete) and top-level folder management (create, rename, delete; Unicode names supported).
-- **Recovery trash** for folders and homes deleted through the UI.
+- **Recovery trash** for folders and homes deleted through the UI, with one-click **restore** and permanent delete.
 - **Safe disk release** before unplugging or re-partitioning.
-- MiniDLNA integration, Persian/English UI, light/dark mode, mobile friendly.
+- **Remote access with WireGuard:** every user gets a QR code and reaches their files from anywhere, encrypted; only the file server is reachable through the tunnel.
+- **Media library:** an existing NTFS, exFAT or FAT disk full of movies is shared read-only as `Library` and on TVs, **without erasing it**.
+- **Time Machine** backups for Macs into each user's private folder.
+- **Read-only users** (e.g. children): they can view Shared and Media but not change them.
+- **Disk maintenance:** filesystem check and repair from the page, and spin-down of idle mechanical disks.
+- **Space usage chart** (per user, Shared, Media, trash) and **disk-full warnings** at 90% and 97%.
+- DLNA integration with library rescan, Persian/English UI with tabs, light/dark mode, mobile friendly.
 
 ## Compatibility
 
-Architecture independent (`PKGARCH:=all`): ARMv7, ARMv8/aarch64, ARMv9, x86-64 and MIPS. Use the `.apk` on OpenWrt 25.12+ and the `.ipk` on OpenWrt 24.10 and older. Required: a USB port with `kmod-usb-storage` and `kmod-fs-ext4`. Dependencies installed automatically: `luci-base rpcd rpcd-mod-file block-mount e2fsprogs parted swap-utils`. Optional: `samba4-server` (needed for file sharing) and `minidlna`.
+Architecture independent (`PKGARCH:=all`): ARMv7, ARMv8/aarch64, ARMv9, x86-64 and MIPS. Use the `.apk` on OpenWrt 25.12+ and the `.ipk` on OpenWrt 24.10 and older. Required: a USB port with `kmod-usb-storage` and `kmod-fs-ext4`. Dependencies installed automatically: `luci-base rpcd rpcd-mod-file block-mount e2fsprogs parted swap-utils`. Optional: `samba4-server` (needed for file sharing), `minidlna` (TVs), `kmod-wireguard wireguard-tools` (remote access), `kmod-fs-ntfs3` / `kmod-fs-exfat` / `kmod-fs-vfat` (media library) and `hd-idle` (spin-down).
 
 ## Install
 
@@ -345,9 +408,9 @@ Removal deletes Makhzan's SMB shares, removes the settings Makhzan added to the 
 ## Quick start
 
 1. Plug in the USB disk.
-2. In **USB disk allocation**, select the disk (press **Release disk** if it is in use), enable **File server · NAS**, press **Use all remaining**, then **Review plan** → type the disk name → **Erase and create**. This erases the disk; use **Existing storage** instead to keep an ext4 disk's files.
-3. Turn on **SMB** (and **DLNA** for TVs).
-4. **Add user**.
+2. On the **Disk** tab, in **USB disk allocation**, select the disk (press **Release disk** if it is in use), enable **File server · NAS**, press **Use all remaining**, then **Review plan** → type the disk name → **Erase and create**. This erases the disk; use **Existing storage** instead to keep an ext4 disk's files.
+3. On the **Services** tab turn on **SMB** (and **DLNA** for TVs).
+4. On the **Users** tab press **Add user**.
 5. Connect (see below).
 
 ## Folders: private, Shared and Media
@@ -368,7 +431,7 @@ Use your router's address instead of `192.168.1.1` and the username/password cre
 
 | Device | How |
 |---|---|
-| **Windows** | File Explorer: `\192.168.1.1\ali` (private), `\192.168.1.1\Shared`, `\192.168.1.1\Media`. To keep it: right-click This PC → **Map network drive**. |
+| **Windows** | File Explorer: `\\192.168.1.1\ali` (private), `\\192.168.1.1\Shared`, `\\192.168.1.1\Media`. To keep it: right-click This PC → **Map network drive**. |
 | **Android** | **CX File Explorer** — step by step below |
 | **iPhone / iPad** | **Files** app → ⋯ → **Connect to Server** → `smb://192.168.1.1` |
 | **macOS** | Finder → **Go → Connect to Server** → `smb://192.168.1.1` |
@@ -387,7 +450,30 @@ Use your router's address instead of `192.168.1.1` and the username/password cre
 
 To send photos or videos from the phone: long-press the file → **Copy** → open the network location → open the target folder → **Paste**. The connection is saved in the NETWORK tab.
 
-**Windows note:** Windows connects to a server as only one user at a time. After logging in as one user it will not ask again, and another user's private folder will not open. Close File Explorer and run `net use * /delete /y` (or sign out of Windows) to switch users, or use the IP address for one user and the router name (`\OpenWrt.lan\ali2`) for another.
+**Windows note:** Windows connects to a server as only one user at a time. After logging in as one user it will not ask again, and another user's private folder will not open. Close File Explorer and run `net use * /delete /y` (or sign out of Windows) to switch users, or use the IP address for one user and the router name (`\\OpenWrt.lan\ali2`) for another.
+
+## Remote access (WireGuard)
+
+Requirements: `kmod-wireguard` and `wireguard-tools`; the router must be reachable from the internet with a **public IP** or a **DDNS** name. If the router sits behind another modem (its WAN address looks like `192.168.x.x`), forward **UDP 51820** on that modem to the router's WAN address. It cannot work behind **CGNAT**.
+
+1. **Remote access** tab → enter the public address and port → **Turn on remote access**.
+2. Next to each user press **Create access and QR**.
+3. Install the **WireGuard** app (Google Play, App Store, or wireguard.com), tap **+** → **Scan from QR code**, then switch the tunnel on.
+4. Connect as at home: `smb://192.168.1.1` (your router's LAN address) in CX File Explorer or Files, `\\192.168.1.1\user` on Windows.
+
+Only the file server (SMB) is reachable through the tunnel; the router's admin page, SSH and the rest of the home network stay closed. A QR code works like a password: **Revoke** it if a phone is lost. Turning remote access off invalidates every QR code and closes the port.
+
+## Media library (existing NTFS or exFAT disk)
+
+Install the filesystem driver (`kmod-fs-ntfs3`, `kmod-fs-exfat` or `kmod-fs-vfat`), plug the disk in, then **Disk** tab → **Media library** → **Use as library**. The disk is mounted **read-only**: its content appears as the `Library` share (for all Makhzan users) and in DLNA, and nothing on it is changed.
+
+## Time Machine, read-only users and disk maintenance
+
+- **Time Machine:** turn it on in the **Services** tab (optionally with a per-user size limit in GB). On the Mac: **System Settings → Time Machine → Add Backup Disk** and choose your own private folder.
+- **Read-only users:** tick **Read-only** when creating a user, or press **Read-only** next to an existing user. They can view Shared and Media but not change them; their own private folder works normally.
+- **Check and repair disk:** after a power cut or an unplug without release, **Disk → Disk maintenance → Check and repair disk**. Shares pause for a few minutes and the result (healthy, repaired, or replace the disk) is shown.
+- **Spin-down:** install `hd-idle` and choose an idle time for mechanical disks.
+- **Recovery trash:** **Restore** returns an item to its owner's private folder; a deleted user's home can be restored after creating a user with the same name again.
 
 ## Limitations
 
@@ -395,12 +481,15 @@ To send photos or videos from the phone: long-press the file → **Copy** → op
 - The planner erases the whole disk; it cannot resize. Unallocated space can only be used later by re-partitioning (erasing). One NAS disk at a time. No per-user quotas.
 - Extroot needs a reboot; a disk holding the active extroot cannot be released. To undo extroot: power off, unplug the USB disk, boot (the router uses internal storage), run `uci set fstab.makhzan_extroot.enabled=0; uci commit fstab`, then plug the disk back in.
 - Makhzan appends four settings to `/etc/samba/smb.conf.template`: tdbsam (lockout), access-based share enumeration, unix extensions off, and `map to guest = Never` (unknown accounts are rejected instead of becoming guests, so Windows shows its password prompt). They also affect other Samba shares on the router; guest (passwordless) shares stop working. Removal takes all of them out except tdbsam, so passwords are not lost. The lockout policy lives in RAM and is re-applied at every boot (not active during the first seconds of boot) and relies on a correct router clock. Lockout applies to SMB only.
-- SMB2/SMB3 only, LAN only. Use a VPN for remote access; never expose SMB to the internet.
+- SMB2/SMB3 only; direct access from the LAN only. Use **Remote access (WireGuard)** from outside; never expose SMB to the internet.
 - Usernames: lowercase a-z, 0-9, `_`, `-` (max 31); `shared`, `media`, `homes`, `root`, `admin` are reserved. Folder names cannot contain `/ \ : * ? " < > |` or end with a dot/space.
-- The web UI manages top-level folders only; files are handled over SMB. Files deleted over SMB do not go to the recovery trash. Restoring from the trash requires SSH.
-- DLNA has no authentication: anything in `Media` is visible to every device on the LAN. `Shared` and `Media` are writable by all Makhzan users.
+- The web UI manages top-level folders only; files are handled over SMB. Files deleted over SMB do not go to the recovery trash. Space usage is recalculated every five minutes.
+- DLNA has no authentication: anything in `Media` is visible to every device on the LAN. `Shared` and `Media` are writable by all Makhzan users except read-only users.
 - Performance depends on the router (typically 15-30 MB/s on USB 2.0). Always release the disk before unplugging it.
 - Use the router's proper power supply (Google WiFi: USB-C 5 V / 3 A, 15 W). A weak adapter (for example 1 A) combined with a USB disk causes sudden resets (typically during boot or when Wi-Fi clients connect) and can corrupt data on the disk. Power 2.5-inch hard disks from a powered USB hub or their own supply.
+- WireGuard needs a public IP or port forwarding and cannot work behind CGNAT; some networks restrict WireGuard. The endpoint must be an IPv4 address or a DDNS name. DLNA does not work through the tunnel (SMB only).
+- The media library is read-only, one library disk at a time, visible to all Makhzan users.
+- Time Machine was verified at the Samba configuration level, not with a real Mac. Spin-down only matters for mechanical disks, and some USB enclosures ignore it. The disk check supports ext2/3/4 and pauses shares while it runs.
 - The router's root administrator can access all files. No WebDAV, FTP or cloud access.
 
 ## Build

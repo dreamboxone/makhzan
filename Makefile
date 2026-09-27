@@ -8,8 +8,8 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-makhzan
-PKG_VERSION:=1.1.0
-PKG_RELEASE:=13
+PKG_VERSION:=1.2.0
+PKG_RELEASE:=1
 PKG_LICENSE:=GPL-3.0-only
 PKG_LICENSE_FILES:=LICENSE
 PKG_MAINTAINER:=dreamboxone
@@ -52,6 +52,7 @@ define Package/luci-app-makhzan/install
 	$(INSTALL_BIN) ./files/etc/init.d/makhzan $(1)/etc/init.d/makhzan
 	$(INSTALL_BIN) ./files/usr/sbin/makhzanctl $(1)/usr/sbin/makhzanctl
 	$(INSTALL_BIN) ./files/usr/libexec/makhzan-storage $(1)/usr/libexec/makhzan-storage
+	$(INSTALL_BIN) ./files/usr/libexec/makhzan-remote $(1)/usr/libexec/makhzan-remote
 	$(INSTALL_DATA) ./files/usr/libexec/makhzan-usb.sh $(1)/usr/libexec/makhzan-usb.sh
 	$(INSTALL_DATA) ./LICENSE $(1)/usr/share/licenses/makhzan/LICENSE
 	$(INSTALL_DIR) $(1)/usr/share/rpcd/acl.d $(1)/usr/share/luci/menu.d

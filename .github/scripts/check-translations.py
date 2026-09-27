@@ -17,7 +17,7 @@ for line in block.splitlines():
     if line.startswith("'") and "': '" in line:
         keys.add(line[1:line.index("': '")])
 msgs=set()
-for f in ['files/usr/sbin/makhzanctl','files/usr/libexec/makhzan-storage']:
+for f in ['files/usr/sbin/makhzanctl','files/usr/libexec/makhzan-storage','files/usr/libexec/makhzan-remote']:
     for m in re.finditer(r"(?:fail|error) '([^']+)'", open(f,encoding='utf-8').read()):
         msgs.add(m.group(1))
 missing=sorted(m for m in msgs if m not in keys)

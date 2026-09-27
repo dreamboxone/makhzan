@@ -48,3 +48,23 @@ minidlna 1.3.3, 16 GB USB flash drive. Client: Windows 11. Date: 2026-09-26.
 | DLNA | VLC Universal Plug'n'Play shows the "Makhzan" server with Browse Folders/Music/Pictures/Video; video listed and playable | Pass |
 | CI | GitHub Actions: apk and ipk installed and exercised on x86_64, aarch64 and armv7l OpenWrt containers | Pass |
 | SMB | Android (SMB file manager): lists only the user's share plus Media and Shared; upload to Media stored as ali:makhzan 0664 and indexed by DLNA automatically | Pass |
+
+## Version 1.2.0 (2026-09-27)
+
+Same device, plus a second USB disk formatted NTFS on Windows (media library test).
+
+| Area | Test | Result |
+|---|---|---|
+| Usage | Space usage scanned in the background (per user, Shared, Media, trash); first status reports "calculating", later filled; cache refreshed every 5 minutes | Pass |
+| Usage | Disk-full warning at 90% and error at 97% of the file server | Pass (UI preview) |
+| Trash | Restore a Persian-named folder into the owner's private folder; name clash restored as "name (2)" | Pass |
+| Trash | Home of a deleted user refused until the user is created again, then restored as "Recovered 2026-09-27"; `..` and path input rejected | Pass |
+| DLNA | Rescan rebuilds the library database and re-indexes Media | Pass |
+| Users | Read-only user from Windows: Shared readable, writing to Shared denied, own private folder writable | Pass |
+| Time Machine | `fruit` settings and `timemachine` / `timemachine_maxsize = 200G` on private shares; removed again when turned off | Pass (configuration level; no Mac available) |
+| Spin-down | 15 minutes → `hd-idle -a sda -i 900` running; 0 stops it | Pass (configuration level; flash drive) |
+| Disk check | Check-and-repair job: shares stopped, `e2fsck` clean in about 7 s, shares and DLNA restarted | Pass |
+| Library | NTFS disk mounted read-only with ntfs3; `Library` share and DLNA indexing; Windows opens a Persian folder name and plays a 21 MB video; writes denied; off/on; invalid input rejected | Pass |
+| Remote | WireGuard end to end with the client in a network namespace: handshake; SMB (445) reachable; SSH (22), LuCI (80) and DLNA (8200) refused | Pass |
+| Remote | Turning remote access off removes the interface, peers and firewall rules | Pass |
+| UI | Tabs (Home, Users, Services, Disk, Remote access, Recovery trash), QR dialog, Light (sun) / Dark (moon) switch, Persian/English, phone width: no script errors, no horizontal scroll | Pass (UI preview) |

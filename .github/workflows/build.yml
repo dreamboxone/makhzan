@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Shell syntax
-        run: for f in files/usr/sbin/makhzanctl files/usr/libexec/makhzan-storage files/usr/libexec/makhzan-usb.sh files/etc/init.d/makhzan scripts/build-package.sh .github/scripts/smoke-test.sh; do sh -n "$f"; done
+        run: for f in files/usr/sbin/makhzanctl files/usr/libexec/makhzan-storage files/usr/libexec/makhzan-usb.sh files/usr/libexec/makhzan-remote files/etc/init.d/makhzan scripts/build-package.sh .github/scripts/smoke-test.sh; do sh -n "$f"; done
       - name: JavaScript syntax
         run: node --check files/www/luci-static/resources/view/makhzan/overview.js
       - name: Every backend message has a Persian translation

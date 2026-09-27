@@ -21,7 +21,7 @@ case "$format" in
 esac
 
 echo "== shell syntax"
-for f in /usr/sbin/makhzanctl /usr/libexec/makhzan-storage /usr/libexec/makhzan-usb.sh /etc/init.d/makhzan; do
+for f in /usr/sbin/makhzanctl /usr/libexec/makhzan-storage /usr/libexec/makhzan-usb.sh /usr/libexec/makhzan-remote /etc/init.d/makhzan; do
 	sh -n "$f"
 done
 
@@ -40,5 +40,16 @@ echo "$status" | grep -q '"ready":false'
 /usr/sbin/makhzanctl mkdir nobody x | grep -q '"ok":false'
 /usr/sbin/makhzanctl language en | grep -q '"ok":true'
 [ "$(uci -q get makhzan.main.language)" = en ]
+/usr/sbin/makhzanctl trash-list | grep -q '"ok":false'
+/usr/sbin/makhzanctl trash-restore ali '../../etc' | grep -q '"ok":false'
+/usr/sbin/makhzanctl library-list | grep -q '"ok":true'
+/usr/sbin/makhzanctl library-set '../x' | grep -q '"ok":false'
+/usr/sbin/makhzanctl remote-status | grep -q '"ok":true'
+/usr/sbin/makhzanctl remote-add 'Bad User' | grep -q '"ok":false'
+/usr/sbin/makhzanctl set spindown abc | grep -q '"ok":false'
+/usr/sbin/makhzanctl set timemachine_gb 250 | grep -q '"ok":true'
+/usr/sbin/makhzanctl access nobody ro | grep -q '"ok":false'
+/usr/sbin/makhzanctl usage-scan
+/usr/sbin/makhzanctl status | grep -q '"timemachine_gb":250'
 
 echo "OK: Makhzan works on $(uname -m) ($format)"

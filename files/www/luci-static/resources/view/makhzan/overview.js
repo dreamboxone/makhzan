@@ -14,7 +14,7 @@
 'require ui';
 'require poll';
 
-var VERSION = '1.1.0';
+var VERSION = '1.2.0';
 /* Replaced with VERSION-RELEASE at package build time; busts the browser cache for theme.css. */
 var BUILD = '@MAKHZAN_BUILD@';
 var callExec = rpc.declare({ object: 'file', method: 'exec', params: [ 'command', 'params', 'env' ] });
@@ -63,6 +63,7 @@ var ICONS = {
 	pulse: '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
 	refresh: '<path d="M20 11a8 8 0 0 0-14.9-3M4 4v4h4M4 13a8 8 0 0 0 14.9 3M20 20v-4h-4"/>',
 	moon: '<path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10z"/>',
+	sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
 	globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
 	pencil: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
 	check: '<path d="M5 12l5 5 9-10"/>',
@@ -74,7 +75,16 @@ var ICONS = {
 	link: '<path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>',
 	send: '<path d="M21 3 3 10.5l7 2.5 2.5 7z"/><path d="M10 13 21 3"/>',
 	sparkle: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>',
-	maximize: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'
+	maximize: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+	home: '<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+	restore: '<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/>',
+	wrench: '<path d="M14.5 4.5a4.5 4.5 0 0 0 5 6.2L11 19.2a2.1 2.1 0 0 1-3-3l8.5-8.5a4.5 4.5 0 0 1-2-3.2z"/>',
+	qr: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/>',
+	download: '<path d="M12 3v12M7 10l5 5 5-5M4 20h16"/>',
+	book: '<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5M9 7h6"/>',
+	clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+	power: '<path d="M12 3v9"/><path d="M6.4 6.4a8 8 0 1 0 11.2 0"/>',
+	eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'
 };
 function icon(name, cls) {
 	var s = E('span', { 'class': 'mk-ico ' + (cls || ''), 'aria-hidden': 'true' });
@@ -188,7 +198,31 @@ var FA_ERRORS = {
 	'Unsupported MiniDLNA configuration': 'تنظیمات DLNA پشتیبانی نمی‌شود (فایل /etc/config/minidlna ناقص است).',
 	'Unsupported overlay layout': 'ساختار حافظهٔ روتر برای extroot پشتیبانی نمی‌شود.',
 	'User created, but Samba restart failed': 'کاربر ساخته شد، ولی راه‌اندازی مجدد Samba ناموفق بود.',
-	'User removed, but Samba restart failed': 'کاربر حذف شد، ولی راه‌اندازی مجدد Samba ناموفق بود.'
+	'User removed, but Samba restart failed': 'کاربر حذف شد، ولی راه‌اندازی مجدد Samba ناموفق بود.',
+	'Cannot create group': 'گروه makhzan ساخته نشد.',
+	'Enable DLNA first': 'ابتدا DLNA را روشن کنید.',
+	'Enter the public IP address or DDNS name of the router': 'آدرس IP عمومی یا نام DDNS روتر را وارد کنید (فقط حروف انگلیسی، عدد، نقطه و خط تیره).',
+	'No free address range for remote access': 'محدودهٔ آدرس آزادی برای دسترسی از بیرون پیدا نشد.',
+	'Only ext2, ext3 and ext4 disks can be checked': 'فقط دیسک‌های ext2، ext3 و ext4 را می‌توان بررسی کرد.',
+	'Partition not found': 'پارتیشن پیدا نشد.',
+	'Port must be between 1024 and 65535': 'شمارهٔ پورت باید بین ۱۰۲۴ و ۶۵۵۳۵ باشد.',
+	'Remote access configuration is incomplete': 'تنظیمات دسترسی از بیرون ناقص است؛ آن را خاموش و دوباره روشن کنید.',
+	'The disk could not be mounted again; reconnect it': 'دیسک دوباره وصل نشد؛ فلش یا هارد را جدا و دوباره وصل کنید.',
+	'The disk is busy; close open files and try again': 'دیسک در حال استفاده است؛ فایل‌های باز را ببندید و دوباره امتحان کنید.',
+	'The disk operation was interrupted': 'عملیات دیسک نیمه‌کاره متوقف شد (مثلاً با قطع برق). دوباره اجرا کنید.',
+	'The item could not be restored': 'بازیابی انجام نشد.',
+	'The kernel driver for this filesystem is not installed': 'درایور این نوع فایل‌سیستم نصب نیست؛ بستهٔ گفته‌شده را از System ← Software نصب کنید.',
+	'The media library disk could not be mounted': 'دیسک کتابخانهٔ رسانه وصل نشد.',
+	'The owner of this item no longer exists; create a user with the same name first': 'صاحب این مورد دیگر وجود ندارد؛ ابتدا کاربری با همان نام بسازید.',
+	'This partition is already used by Makhzan': 'این پارتیشن را خود مخزن استفاده می‌کند (فایل‌سرور، extroot یا swap).',
+	'This user has no remote access yet': 'برای این کاربر هنوز دسترسی از بیرون ساخته نشده است.',
+	'Time Machine needs the Samba fruit module': 'Time Machine به ماژول fruit در Samba نیاز دارد که روی این روتر نیست.',
+	'Trash item not found': 'این مورد در سطل بازیابی پیدا نشد.',
+	'Turn on remote access first': 'ابتدا دسترسی از بیرون را روشن کنید.',
+	'Unsupported filesystem for the media library': 'این نوع فایل‌سیستم برای کتابخانهٔ رسانه پشتیبانی نمی‌شود.',
+	'WireGuard is not installed': 'WireGuard نصب نیست (بسته‌های kmod-wireguard و wireguard-tools).',
+	'WireGuard key could not be created': 'کلید WireGuard ساخته نشد.',
+	'hd-idle is not installed': 'بستهٔ hd-idle نصب نیست.'
 };
 
 function bytes(kib) {
@@ -256,10 +290,21 @@ return view.extend({
 		})()) root.classList.add('mk-dark');
 
 		/* ---------- Hero (a div, not <header>: the LuCI theme styles every <header> as its sticky menu bar) ---------- */
-		var theme = btn(t('روشن / تیره', 'Light / Dark'), function() {
-			root.classList.toggle('mk-dark');
-			try { localStorage.setItem('makhzan-theme', root.classList.contains('mk-dark') ? 'dark' : 'light'); } catch (e) {}
-		}, 'glass', 'moon');
+		/* Light (sun) and Dark (moon) as a two-button switch; the active mode is highlighted. */
+		function themeBtn(dark, text, ico) {
+			return E('button', { 'type': 'button', 'class': 'mk-btn glass', 'click': function() {
+				root.classList.toggle('mk-dark', dark); paintTheme();
+				try { localStorage.setItem('makhzan-theme', dark ? 'dark' : 'light'); } catch (e) {}
+			} }, [ icon(ico), E('span', {}, text) ]);
+		}
+		var lightBtn = themeBtn(false, t('روشن', 'Light'), 'sun'), darkBtn = themeBtn(true, t('تیره', 'Dark'), 'moon');
+		function paintTheme() {
+			var dark = root.classList.contains('mk-dark');
+			lightBtn.classList.toggle('mk-seg-on', !dark); lightBtn.setAttribute('aria-pressed', String(!dark));
+			darkBtn.classList.toggle('mk-seg-on', dark); darkBtn.setAttribute('aria-pressed', String(dark));
+		}
+		paintTheme();
+		var theme = E('div', { 'class': 'mk-seg', 'role': 'group', 'aria-label': t('حالت نمایش', 'Display mode') }, [ lightBtn, darkBtn ]);
 		/* The Persian label always renders in Vazirmatn, also on the English page. */
 		var langBtn = btn(fa ? 'English' : 'فارسی', function() {
 			return call([ 'language', fa ? 'en' : 'fa' ]).then(function() { location.reload(); });
@@ -274,9 +319,8 @@ return view.extend({
 		]));
 
 		var banner = E('div', { 'role': 'status', 'aria-live': 'polite' }), metrics = E('div', { 'class': 'mk-grid mk-metrics' });
-		var usersBox = E('div', { 'class': 'mk-users' }), trashBox = E('div'), serviceArea = E('div'), connectBox = E('div');
+		var usersBox = E('div', { 'class': 'mk-users' }), serviceArea = E('div'), connectBox = E('div');
 		root.appendChild(banner);
-		root.appendChild(metrics);
 
 		function refresh() {
 			return Promise.all([ call([ 'status' ]), call([ 'storage-devices' ]).catch(function() { return { devices: devices }; }) ])
@@ -351,15 +395,18 @@ return view.extend({
 		}
 		function addUser() {
 			var name = E('input', { 'placeholder': 'ali', 'maxlength': '31', 'dir': 'ltr', 'autocomplete': 'off' }), p = passwordInputs(), msg = E('p', { 'class': 'mk-msg' });
+			var ro = E('input', { 'type': 'checkbox', 'class': 'mk-switch', 'aria-label': t('فقط خواندنی', 'Read-only') });
 			modal(t('کاربر جدید', 'New user'), [
 				E('p', { 'class': 'mk-muted' }, t('یک پوشهٔ خصوصی و یک اشتراک SMB هم‌نام با کاربر ساخته می‌شود. کاربر به پوشه‌های Shared و Media هم دسترسی دارد.', 'Creates a private folder and an SMB share named after the user. The user can also use the Shared and Media folders.')),
-				field(t('نام کاربری (حروف کوچک انگلیسی)', 'Username (lowercase)'), name) ].concat(p.fields, [ msg,
+				field(t('نام کاربری (حروف کوچک انگلیسی)', 'Username (lowercase)'), name) ].concat(p.fields, [
+				E('label', { 'class': 'mk-switch-row mk-option' }, [ ro, E('span', {}, t('فقط خواندنی: Shared و Media را فقط می‌بیند و نمی‌تواند چیزی را تغییر دهد (مثلاً برای بچه‌ها). پوشهٔ خصوصی خودش عادی است.', 'Read-only: can only view Shared and Media, not change them (e.g. for children). Their own private folder works normally.')) ]),
+				msg,
 				actions([ btn(t('ساخت کاربر', 'Create user'), function() {
 					if (!/^[a-z][a-z0-9_-]{0,30}$/.test(name.value)) { msg.textContent = t('نام کاربری باید با حرف کوچک انگلیسی شروع شود و فقط شامل حروف کوچک، عدد، _ یا - باشد.', 'Start with a lowercase letter; use only a-z, 0-9, _ or -.'); return; }
 					if (data.users.some(function(u) { return u.name === name.value; })) { msg.textContent = t('کاربر «' + name.value + '» از قبل وجود دارد. نام دیگری انتخاب کنید.', 'User "' + name.value + '" already exists. Choose another name.'); return; }
 					var err = p.check(); if (err) { msg.textContent = err; return; }
 					msg.textContent = t('در حال ساخت…', 'Creating…');
-					return sendPassword(p.a.value).then(function(token) { return call([ 'add-user', name.value, token ]); }).then(function() { ui.hideModal(); return refresh(); }).catch(function(e) { msg.textContent = msgOf(e); });
+					return sendPassword(p.a.value).then(function(token) { return call([ 'add-user', name.value, token ].concat(ro.checked ? [ 'ro' ] : [])); }).then(function() { ui.hideModal(); return refresh(); }).catch(function(e) { msg.textContent = msgOf(e); });
 				}, 'success', 'userPlus'), btn(t('انصراف', 'Cancel'), ui.hideModal, 'soft-violet', 'x') ]) ]), 'userPlus');
 			name.focus();
 		}
@@ -368,28 +415,38 @@ return view.extend({
 		var lastJob = null;
 		function alertBox(kind, ico, text) { return E('p', { 'class': 'mk-alert ' + kind }, [ icon(ico), E('span', {}, text) ]); }
 		function paintJob(job) {
-			var box = E('div');
+			var box = E('div'), check = job.kind === 'check';
 			if (job.state === 'running') {
-				var steps = { checking: t('بررسی', 'checking'), partitioning: t('پارتیشن‌بندی', 'partitioning'), formatting: t('فرمت', 'formatting'), configuring: t('پیکربندی', 'configuring'), copying_overlay: t('کپی اطلاعات روتر روی USB (ممکن است چند دقیقه طول بکشد)', 'copying router data to USB (may take minutes)'), activating: t('فعال‌سازی', 'activating') };
-				box.appendChild(alertBox('mk-busy', 'refresh', t('آماده‌سازی دیسک در حال انجام است: ', 'Preparing disk: ') + (steps[job.step] || '…') + t(' — روتر را خاموش نکنید و USB را جدا نکنید.', ' — do not power off or unplug the USB.')));
+				var steps = { checking: check ? t('بررسی فایل‌سیستم (ممکن است چند دقیقه طول بکشد)', 'checking the filesystem (may take minutes)') : t('بررسی', 'checking'),
+					partitioning: t('پارتیشن‌بندی', 'partitioning'), formatting: t('فرمت', 'formatting'), configuring: t('پیکربندی', 'configuring'),
+					copying_overlay: t('کپی اطلاعات روتر روی USB (ممکن است چند دقیقه طول بکشد)', 'copying router data to USB (may take minutes)'), activating: t('فعال‌سازی', 'activating'),
+					unmounting: t('قطع موقت اشتراک‌ها و جدا کردن دیسک', 'pausing shares and unmounting the disk'), mounting: t('اتصال دوبارهٔ دیسک', 'mounting the disk again') };
+				box.appendChild(alertBox('mk-busy', 'refresh', (check ? t('بررسی دیسک در حال انجام است: ', 'Checking disk: ') : t('آماده‌سازی دیسک در حال انجام است: ', 'Preparing disk: ')) + (steps[job.step] || '…') + t(' — روتر را خاموش نکنید و USB را جدا نکنید.', ' — do not power off or unplug the USB.')));
 			}
 			else if (job.state === 'failed')
-				box.appendChild(alertBox('error', 'alert', t('آماده‌سازی دیسک ناموفق بود: ', 'Disk preparation failed: ') + msgOf(job.error)));
-			else if (job.state === 'done' && lastJob === 'running')
-				box.appendChild(alertBox('ok', 'check', t('دیسک با موفقیت آماده شد.', 'Disk prepared successfully.')));
+				box.appendChild(alertBox('error', 'alert', (check ? t('بررسی دیسک ناموفق بود: ', 'Disk check failed: ') : t('آماده‌سازی دیسک ناموفق بود: ', 'Disk preparation failed: ')) + msgOf(job.error)));
+			else if (job.state === 'done' && lastJob === 'running') {
+				if (!check) box.appendChild(alertBox('ok', 'check', t('دیسک با موفقیت آماده شد.', 'Disk prepared successfully.')));
+				else if (job.result === 'clean') box.appendChild(alertBox('ok', 'check', t('بررسی تمام شد: دیسک سالم است و خطایی پیدا نشد.', 'Check finished: the disk is healthy, no errors found.')));
+				else if (job.result === 'repaired') box.appendChild(alertBox('ok', 'wrench', t('بررسی تمام شد: خطاهای فایل‌سیستم پیدا و تعمیر شد.', 'Check finished: filesystem errors were found and repaired.')));
+				else if (job.result === 'errors') box.appendChild(alertBox('warn', 'alert', t('بعضی خطاها تعمیر نشد. از فایل‌های مهم نسخهٔ پشتیبان بگیرید و دیسک را عوض کنید.', 'Some errors could not be repaired. Back up important files and replace the disk.')));
+				else box.appendChild(alertBox('error', 'alert', t('بررسی دیسک اجرا نشد (کد ' + job.code + ').', 'The disk check could not run (code ' + job.code + ').')));
+			}
 			lastJob = job.state;
 			return box;
 		}
 		/* The job banner is refreshed on its own (cheap storage-job call), so it never sticks when the
 		 * heavier status call is slow during large USB copies. */
-		var jobBox = E('div'), extrootBox = E('div');
-		banner.replaceChildren(jobBox, extrootBox);
+		var fullBox = E('div'), jobBox = E('div'), extrootBox = E('div');
+		banner.replaceChildren(fullBox, jobBox, extrootBox);
 		function showJob(job) {
 			jobBox.replaceChildren(paintJob(job));
 			var running = job.state === 'running';
-			prepare.dataset.locked = running ? '1' : '0';
-			if (prepare.dataset.running !== '1') prepare.disabled = running;
-			prepare.title = running ? t('آماده‌سازی دیسک در حال انجام است', 'A disk preparation is running') : '';
+			[ prepare, checkBtn ].forEach(function(b) {
+				b.dataset.locked = running ? '1' : '0';
+				if (b.dataset.running !== '1') b.disabled = running;
+				b.title = running ? t('یک عملیات دیسک در حال انجام است', 'A disk operation is running') : '';
+			});
 		}
 		function extrootOffDialog() {
 			modal(t('خاموش‌کردن extroot', 'Turn off extroot'), [
@@ -424,11 +481,16 @@ return view.extend({
 		function paint(d) {
 			data = d;
 			var disk = d.disk, pct = disk && disk.total_kib ? Math.min(100, disk.used_kib * 100 / disk.total_kib) : 0, s = d.services;
+			fullBox.replaceChildren();
+			if (disk && pct >= 97) fullBox.appendChild(alertBox('error', 'alert', [ t('فضای فایل‌سرور تقریباً پر است (', 'The file server is almost full ('), num(Math.round(pct) + '%'), t('). فایل‌های اضافی یا سطل بازیابی را پاک کنید؛ در غیر این صورت ذخیرهٔ فایل ناموفق می‌شود.', '). Delete unneeded files or empty the recovery trash, otherwise saving files will fail.') ]));
+			else if (disk && pct >= 90) fullBox.appendChild(alertBox('warn', 'alert', [ t('بیش از ۹۰٪ فضای فایل‌سرور پر شده است (', 'More than 90% of the file server is used ('), num(Math.round(pct) + '%'), t('). نمودار «مصرف فضا» در زبانهٔ خانه نشان می‌دهد چه چیزی بیشترین جا را گرفته.', '). The space usage chart on the Home tab shows what takes the most room.') ]));
+			paintUsage(d);
 			function dot(on) { return E('b', { 'class': on ? 'mk-on' : 'mk-off' }, on ? '●' : '○'); }
 			metrics.replaceChildren(
 				metric(t('فضای آزاد NAS', 'NAS free space'), disk ? num(bytes(disk.available_kib)) : '—',
 					disk ? num(bytes(disk.used_kib) + ' / ' + bytes(disk.total_kib) + ' · ' + disk.root) : t('حافظه آماده نیست', 'Storage is not ready'),
-					'#3b82f6', 'pie', E('div', { 'class': 'mk-track' }, E('i', { 'style': 'width:' + pct + '%;background:linear-gradient(90deg,#22d3ee,#3b82f6)' }))),
+					pct >= 97 ? '#ef4444' : pct >= 90 ? '#f59e0b' : '#3b82f6', 'pie',
+					E('div', { 'class': 'mk-track' }, E('i', { 'style': 'width:' + pct + '%;background:' + (pct >= 97 ? '#ef4444' : pct >= 90 ? 'linear-gradient(90deg,#f59e0b,#ea580c)' : 'linear-gradient(90deg,#22d3ee,#3b82f6)') }))),
 				metric(t('کاربران', 'Users'), String(d.users.length), t('پوشهٔ خصوصی + اشتراک SMB', 'Private folder + SMB share'), '#8b5cf6', 'users'),
 				metric(t('سرویس‌ها', 'Services'), E('span', { 'class': 'mk-svc' }, [ 'SMB ', dot(s.samba_running), '  DLNA ', dot(s.dlna_running) ]),
 					d.extroot_active ? t('extroot فعال است', 'extroot is active') : t('وضعیت اجرای سرویس‌ها', 'Service runtime state'), '#10b981', 'pulse'),
@@ -439,13 +501,17 @@ return view.extend({
 
 			usersBox.replaceChildren();
 			d.users.forEach(function(u) {
-				var badges = [ E('span', { 'class': 'mk-chip' }, [ icon('drive'), num(bytes(u.used_kib)) ]) ];
+				var badges = [ E('span', { 'class': 'mk-chip' }, [ icon('drive'), u.used_kib >= 0 ? num(bytes(u.used_kib)) : '…' ]) ];
+				if (u.readonly) badges.push(E('span', { 'class': 'mk-chip info' }, [ icon('eye'), t('فقط خواندنی', 'Read-only') ]));
 				if (!u.home) badges.push(E('span', { 'class': 'mk-chip warn' }, [ icon('alert'), t('پوشه در دسترس نیست', 'Folder unavailable') ]));
 				if (!u.smb) badges.push(E('span', { 'class': 'mk-chip warn' }, [ icon('alert'), t('بدون رمز SMB', 'No SMB password') ]));
 				if (u.locked) badges.push(E('span', { 'class': 'mk-chip error' }, [ icon('lock'), t('قفل‌شده (۴ ورود ناموفق)', 'Locked (4 failed logins)') ]));
 				if (u.smb && !u.locked && u.home) badges.push(E('span', { 'class': 'mk-chip ok' }, [ icon('check'), t('فعال', 'Active') ]));
 				var acts = [ btn(t('پوشه‌ها', 'Folders'), function() { return folders(u.name); }, 'soft-blue', 'folder'), btn(t('تغییر رمز', 'Password'), function() { changePassword(u.name); }, 'soft-amber', 'key') ];
 				if (u.locked) acts.push(btn(t('رفع قفل', 'Unlock'), function() { return call([ 'unlock', u.name ]).then(refresh); }, 'soft-green', 'unlock'));
+				acts.push(btn(u.readonly ? t('دسترسی کامل', 'Full access') : t('فقط خواندنی', 'Read-only'), function() {
+					return call([ 'access', u.name, u.readonly ? 'rw' : 'ro' ]).then(refresh);
+				}, 'soft-violet', 'eye'));
 				acts.push(btn(t('حذف کاربر', 'Delete user'), function() { deleteUser(u.name); }, 'soft-red', 'trash'));
 				usersBox.appendChild(E('div', { 'class': 'mk-user' }, [
 					E('div', { 'class': 'mk-user-head' }, [ E('span', { 'class': 'mk-avatar' }, u.name.charAt(0).toUpperCase()), E('strong', { 'dir': 'ltr' }, u.name), E('span', { 'class': 'mk-chips' }, badges) ]),
@@ -454,12 +520,17 @@ return view.extend({
 			});
 			if (!d.users.length) usersBox.appendChild(E('p', { 'class': 'mk-empty' }, [ icon('users'), t('هنوز کاربری ساخته نشده است.', 'No users yet.') ]));
 
-			trashBox.replaceChildren(E('div', { 'class': 'mk-stat' }, [ icon('trash'), E('span', {}, t('حجم سطل بازیابی: ', 'Recovery trash size: ')), E('strong', {}, num(bytes(d.trash_kib))) ]));
+			tmCheck.checked = !!s.timemachine_enabled; tmCheck.disabled = !s.timemachine_supported || !s.samba_installed;
+			if (document.activeElement !== tmSize) tmSize.value = String(s.timemachine_gb || 0);
+			spinSelect.disabled = !s.spindown_supported;
+			if (document.activeElement !== spinSelect) spinSelect.value = String([ 0, 10, 20, 30, 60, 120 ].indexOf(s.spindown_minutes) >= 0 ? s.spindown_minutes : 0);
+			spinNote.textContent = s.spindown_supported ? '' : t('برای این قابلیت بستهٔ hd-idle را از System ← Software نصب کنید.', 'Install the hd-idle package from System → Software for this feature.');
 
 			var host = location.hostname;
 			connectBox.replaceChildren(E('div', { 'class': 'mk-connect', 'dir': 'ltr' }, [
 				E('code', {}, [ icon('link'), '\\\\' + host + '\\Shared' ]), E('code', {}, [ icon('link'), '\\\\' + host + '\\Media' ]),
-				E('code', {}, [ icon('link'), '\\\\' + host + '\\' + t('نام‌کاربری', 'username') ]), E('code', {}, [ icon('link'), 'smb://' + host + '/Shared' ])
+				E('code', {}, [ icon('link'), '\\\\' + host + '\\' + t('نام‌کاربری', 'username') ]), E('code', {}, [ icon('link'), 'smb://' + host + '/Shared' ]),
+				d.library ? E('code', {}, [ icon('book'), '\\\\' + host + '\\Library' ]) : ''
 			]));
 		}
 
@@ -484,7 +555,7 @@ return view.extend({
 		}
 		function current() { return devices.filter(function(d) { return d.path === select.value; })[0]; }
 		[ [ t('افزایش فضای روتر', 'Router expansion'), 'extroot', 134, '#8b5cf6', 'layers', t('فضای نصب بسته‌های روتر را روی USB منتقل می‌کند (نیاز به ریبوت).', 'Moves package storage to USB (reboot required).') ],
-		  [ t('حافظهٔ مجازی', 'Virtual RAM'), 'swap', 256, '#f59e0b', 'sparkle', t('برای روترهای کم‌RAM؛ ۲۵۶ تا ۱۰۲۴ مگابایت کافی است.', 'For low-RAM routers; 256-1024 MB is enough.') ],
+		  [ t('حافظهٔ مجازی', 'Virtual RAM'), 'swap', 256, '#f59e0b', 'sparkle', t('برای روترهای با رم پایین: ۲۵۶ تا ۱۰۲۴ مگابایت کافی است.', 'For routers with little RAM: 256-1024 MB is enough.') ],
 		  [ t('فایل‌سرور', 'File server'), 'NAS', 1024, '#10b981', 'server', t('محل پوشه‌های کاربران، Shared و Media.', 'Holds user, Shared and Media folders.') ] ].forEach(function(role, idx) {
 			var check = E('input', { 'type': 'checkbox', 'class': 'mk-switch', 'aria-label': role[0] });
 			var input = E('input', { 'type': 'number', 'min': String(idx === 0 ? 134 : idx === 1 ? 17 : 34), 'step': '1', 'value': String(role[2]), 'disabled': 'disabled', 'aria-label': role[0] + ' MB', 'dir': 'ltr' });
@@ -597,7 +668,28 @@ return view.extend({
 				E('div', { 'class': 'mk-service-text' }, [ E('strong', {}, [ s[0], E('span', { 'class': 'mk-engine' }, s[1] === 'samba' ? 'Samba' : 'MiniDLNA') ]), E('small', {}, installed ? s[4] : t('نصب نیست — بستهٔ ', 'Not installed — install package ') + s[5]) ]),
 				check ]));
 		});
+		var tmCheck = E('input', { 'type': 'checkbox', 'class': 'mk-switch', 'aria-label': 'Time Machine' });
+		var tmSize = E('input', { 'type': 'number', 'min': '0', 'step': '1', 'dir': 'ltr', 'class': 'mk-narrow', 'aria-label': 'GB' });
+		function tmApply() {
+			var gb = /^\d{1,6}$/.test(tmSize.value) ? tmSize.value : '0';
+			return call([ 'set', 'timemachine_gb', gb ]).then(function() { return call([ 'option', 'timemachine', tmCheck.checked ? '1' : '0' ]); })
+				.then(function() { return call([ 'apply' ]); }).then(refresh);
+		}
+		tmCheck.addEventListener('change', function() {
+			tmCheck.disabled = true;
+			tmApply().catch(function(e) { tmCheck.checked = !tmCheck.checked; notify(e); }).finally(function() { tmCheck.disabled = !data.services.timemachine_supported; });
+		});
+		serviceArea.appendChild(E('div', { 'class': 'mk-service', 'style': '--accent:#64748b' }, [
+			E('span', { 'class': 'mk-service-ico' }, icon('clock')),
+			E('div', { 'class': 'mk-service-text' }, [ E('strong', {}, [ 'Time Machine', E('span', { 'class': 'mk-engine' }, 'macOS') ]),
+				E('small', {}, t('پشتیبان‌گیری خودکار مک روی پوشهٔ خصوصی هر کاربر. در مک: System Settings ← Time Machine ← Add Backup Disk و پوشهٔ خودتان را انتخاب کنید.', 'Automatic Mac backups into each user\'s private folder. On the Mac: System Settings → Time Machine → Add Backup Disk, then pick your own folder.')),
+				E('div', { 'class': 'mk-row mk-inline' }, [ E('span', {}, t('سقف حجم هر کاربر (GB، صفر = بدون سقف):', 'Size limit per user (GB, 0 = none):')), tmSize,
+					btn(t('ذخیره', 'Save'), function() { return tmApply(); }, 'soft-blue mk-small', 'check') ]) ]),
+			tmCheck ]));
 		var services = card(t('سرویس‌های شبکه', 'Network services'), [ serviceArea,
+			E('div', { 'class': 'mk-row' }, [ btn(t('اسکن دوبارهٔ کتابخانهٔ DLNA', 'Rescan DLNA library'), function() {
+				return call([ 'dlna-rescan' ]).then(function() { ui.addNotification(null, E('p', {}, t('کتابخانهٔ DLNA از نو ساخته می‌شود؛ چند دقیقه بعد همهٔ فایل‌ها روی تلویزیون دیده می‌شوند.', 'The DLNA library is being rebuilt; all files appear on TVs within a few minutes.')), 'info'); });
+			}, 'soft-blue', 'refresh'), E('small', {}, t('اگر فیلمی را کپی کرده‌اید و روی تلویزیون دیده نمی‌شود.', 'If a copied video does not show up on the TV.')) ]),
 			E('p', { 'class': 'mk-muted' }, t('آدرس‌های اتصال (فقط از شبکهٔ داخلی LAN):', 'Connection addresses (LAN only):')), connectBox,
 			alertBox('ok', 'shield', t('هر کاربر فقط پوشهٔ خصوصی خودش را می‌بیند. بعد از ۴ رمز اشتباه، حساب ۱۵ دقیقه قفل می‌شود.', 'Each user sees only their own private share. After 4 wrong passwords the account is locked for 15 minutes.')),
 			btn(t('اعمال مجدد تنظیمات', 'Re-apply settings'), function() { return call([ 'apply' ]).then(refresh); }, 'soft-green', 'refresh')
@@ -605,19 +697,223 @@ return view.extend({
 
 		/* ---------- Users and trash ---------- */
 		var users = card(t('کاربران و پوشه‌ها', 'Users and folders'), [ btn(t('افزودن کاربر', 'Add user'), addUser, 'success', 'userPlus'), usersBox ], '#f59e0b', 'users');
+		var trashList = E('div', { 'class': 'mk-list mk-list-tall' });
+		function loadTrash() {
+			return call([ 'trash-list' ]).then(paintTrash).catch(function(e) { trashList.replaceChildren(alertBox('error', 'alert', msgOf(e))); });
+		}
+		function paintTrash(r) {
+			trashList.replaceChildren();
+			if (!r.items.length) { trashList.appendChild(E('p', { 'class': 'mk-empty' }, [ icon('trash'), t('سطل بازیابی خالی است.', 'The recovery trash is empty.') ])); return; }
+			r.items.sort(function(a, b) { return a.deleted < b.deleted ? 1 : -1; }).forEach(function(it) {
+				var home = it.kind === 'home';
+				trashList.appendChild(E('div', { 'class': 'mk-folder' }, [ icon(home ? 'user' : 'folder', 'mk-folder-ico'),
+					E('div', { 'class': 'mk-grow' }, [ E('strong', {}, home ? [ t('پوشهٔ کامل کاربر حذف‌شده: ', 'Home of deleted user: '), E('bdi', { 'dir': 'ltr' }, it.user) ] : it.name),
+						E('small', {}, [ t('صاحب: ', 'Owner: '), E('bdi', { 'dir': 'ltr' }, it.user), ' · ', t('حذف: ', 'Deleted: '), num(it.deleted), ' · ', it.size_kib >= 0 ? num(bytes(it.size_kib)) : '…' ]) ]),
+					btn(t('بازیابی', 'Restore'), function() {
+						return call([ 'trash-restore', it.user, it.entry ]).then(function(res) {
+							ui.addNotification(null, E('p', {}, [ t('بازیابی شد در پوشهٔ خصوصی ', 'Restored into the private folder of '), E('bdi', { 'dir': 'ltr' }, it.user), ': ', res.restored ]), 'info');
+							return loadTrash().then(refresh);
+						});
+					}, 'soft-green', 'restore'),
+					btn(t('حذف همیشگی', 'Delete forever'), function() {
+						if (!confirm(t('این مورد برای همیشه پاک شود؟ دیگر قابل بازیابی نیست.', 'Delete this item permanently? It cannot be recovered afterwards.'))) return;
+						return call([ 'trash-delete', it.user, it.entry ]).then(loadTrash);
+					}, 'soft-red', 'trash') ]));
+			});
+		}
 		var trash = card(t('سطل بازیابی', 'Recovery trash'), [
-			E('p', { 'class': 'mk-muted' }, t('پوشه‌های حذف‌شده و پوشهٔ کاربران حذف‌شده اینجا نگه‌داری می‌شوند (فقط برای مدیر).', 'Deleted folders and homes of deleted users are kept here (administrator only).')),
-			trashBox,
-			btn(t('خالی‌کردن سطل', 'Empty trash'), function() {
+			E('p', { 'class': 'mk-muted' }, t('پوشه‌هایی که از صفحهٔ مخزن حذف شده‌اند و پوشهٔ کاربران حذف‌شده. «بازیابی» مورد را به پوشهٔ خصوصی صاحبش برمی‌گرداند. فایل‌هایی که کاربر مستقیماً از راه SMB پاک کند به سطل نمی‌آیند.', 'Folders deleted from the Makhzan page and homes of deleted users. Restore returns an item to its owner\'s private folder. Files a user deletes directly over SMB do not come here.')),
+			trashList,
+			btn(t('خالی‌کردن کامل سطل', 'Empty the whole trash'), function() {
 				if (!confirm(t('همهٔ محتوای سطل بازیابی برای همیشه پاک شود؟', 'Permanently delete everything in the recovery trash?'))) return;
-				return call([ 'trash-empty' ]).then(refresh);
+				return call([ 'trash-empty' ]).then(loadTrash).then(refresh);
 			}, 'danger', 'trash')
 		], '#ef4444', 'trash');
 
+		/* ---------- Disk maintenance: filesystem check and spin-down ---------- */
+		var checkBtn = btn(t('بررسی و تعمیر دیسک', 'Check and repair disk'), function() {
+			if (!confirm(t('اشتراک‌ها و DLNA چند دقیقه قطع می‌شوند و فایل‌سیستم دیسک بررسی و در صورت نیاز تعمیر می‌شود. ادامه می‌دهید؟', 'Shares and DLNA stop for a few minutes while the filesystem is checked and repaired if needed. Continue?'))) return;
+			return call([ 'storage-check' ]).then(function() { lastJob = 'running'; return refresh(); });
+		}, 'warn', 'wrench');
+		var spinSelect = E('select', { 'dir': fa ? 'rtl' : 'ltr', 'class': 'mk-narrow-select', 'aria-label': t('خاموش شدن خودکار هارد', 'Hard-disk spin-down') },
+			[ 0, 10, 20, 30, 60, 120 ].map(function(m) { return E('option', { 'value': String(m) }, m ? m + ' ' + t('دقیقه', 'min') : t('خاموش', 'Off')); }));
+		var spinNote = E('small', { 'class': 'mk-msg' });
+		spinSelect.addEventListener('change', function() {
+			spinSelect.disabled = true;
+			call([ 'set', 'spindown', spinSelect.value ]).then(function() { return call([ 'apply' ]); }).then(refresh).catch(notify).finally(function() { spinSelect.disabled = !data.services.spindown_supported; });
+		});
+		var maintenance = card(t('نگه‌داری دیسک', 'Disk maintenance'), [
+			E('div', { 'class': 'mk-mrow' }, [ E('div', { 'class': 'mk-grow' }, [ E('strong', {}, t('بررسی و تعمیر فایل‌سیستم', 'Check and repair the filesystem')),
+				E('small', {}, t('بعد از قطع ناگهانی برق یا جدا شدن USB بدون «آزادسازی»، یک بار دیسک را بررسی کنید.', 'Run once after a power cut or after the USB disk was unplugged without releasing it.')) ]), checkBtn ]),
+			E('div', { 'class': 'mk-mrow' }, [ E('div', { 'class': 'mk-grow' }, [ E('strong', {}, t('خاموش شدن خودکار هارد', 'Hard-disk spin-down')),
+				E('small', {}, t('هارد مکانیکی بعد از این مدت بیکاری خاموش می‌شود تا صدا، مصرف برق و فرسودگی کم شود (برای فلش لازم نیست).', 'A mechanical hard disk stops after this idle time to cut noise, power and wear (not needed for flash drives).')), spinNote ]), spinSelect ])
+		], '#f59e0b', 'wrench');
+
+		/* ---------- Media library: an existing NTFS/exFAT/FAT/ext disk, read-only ---------- */
+		var libBox = E('div');
+		function loadLibrary() {
+			return call([ 'library-list' ]).then(paintLibrary).catch(function(e) { libBox.replaceChildren(alertBox('error', 'alert', msgOf(e))); });
+		}
+		function paintLibrary(r) {
+			libBox.replaceChildren();
+			if (r.current) libBox.appendChild(E('div', { 'class': 'mk-alert ok' }, [ icon('book'),
+				E('span', {}, [ t('کتابخانهٔ فعال: ', 'Active library: '), E('strong', { 'dir': 'ltr' }, r.current.label || r.current.uuid), ' · ', (r.current.type || '').toUpperCase(),
+					r.current.mounted ? t(' — در اشتراک Library و DLNA', ' — shared as Library and in DLNA') : t(' — دیسک وصل نیست', ' — disk not connected') ]),
+				btn(t('قطع کتابخانه', 'Stop using'), function() { return call([ 'library-off' ]).then(function() { return refresh(); }).then(loadLibrary); }, 'soft-red mk-small', 'x') ]));
+			if (!r.candidates.length) {
+				libBox.appendChild(E('p', { 'class': 'mk-empty' }, [ icon('usb'), t('هارد یا پارتیشن دیگری با NTFS، exFAT، FAT یا ext روی USB پیدا نشد.', 'No other USB disk or partition with NTFS, exFAT, FAT or ext was found.') ]));
+				return;
+			}
+			r.candidates.forEach(function(c) {
+				libBox.appendChild(E('div', { 'class': 'mk-folder' }, [ icon('drive', 'mk-folder-ico'),
+					E('div', { 'class': 'mk-grow' }, [ E('strong', { 'dir': 'ltr' }, c.label || c.dev), E('small', { 'dir': 'ltr' }, c.dev + ' · ' + c.type.toUpperCase() + ' · ' + bytes(c.size_mib * 1024) + (c.mounted_at ? ' · ' + c.mounted_at : '')) ]),
+					c.driver ? btn(t('استفاده به‌عنوان کتابخانه', 'Use as library'), function() {
+						if (!confirm(t('این دیسک فقط‌خواندنی وصل می‌شود و محتوایش در اشتراک Library و روی تلویزیون دیده می‌شود. فایل‌های روی آن تغییر نمی‌کنند. ادامه می‌دهید؟', 'The disk is mounted read-only and shown as the Library share and on TVs. Its files are not changed. Continue?'))) return;
+						return call([ 'library-set', c.uuid ]).then(function() { return refresh(); }).then(loadLibrary);
+					}, 'primary mk-small', 'book') : E('span', { 'class': 'mk-chip warn' }, [ icon('alert'), t('درایور نصب نیست: ', 'Driver missing: '), E('code', { 'dir': 'ltr' }, c.package) ]) ]));
+			});
+		}
+		var libraryCard = card(t('کتابخانهٔ رسانه (هارد موجود، بدون پاک‌کردن)', 'Media library (existing disk, no erase)'), [
+			E('p', { 'class': 'mk-muted' }, t('هارد یا فلشی که از قبل فیلم و موسیقی دارد (NTFS، exFAT، FAT یا ext) را بدون پاک‌کردن وصل کنید. محتوایش فقط‌خواندنی در اشتراک Library و در DLNA تلویزیون دیده می‌شود. پوشهٔ خصوصی روی آن ساخته نمی‌شود.', 'Connect a disk that already holds movies and music (NTFS, exFAT, FAT or ext) without erasing it. Its content appears read-only as the Library share and in DLNA on TVs. No private folders are created on it.')),
+			libBox
+		], '#0ea5e9', 'book');
+
+		/* ---------- Remote access (WireGuard) ---------- */
+		var remoteBox = E('div'), remoteState = null;
+		function loadRemote() {
+			return call([ 'remote-status' ]).then(function(r) { remoteState = r; paintRemote(r); }).catch(function(e) { remoteBox.replaceChildren(alertBox('error', 'alert', msgOf(e))); });
+		}
+		function ago(epoch) {
+			if (!epoch) return t('هنوز وصل نشده', 'never connected');
+			var m = Math.max(0, Math.round((Date.now() / 1000 - epoch) / 60));
+			if (m < 2) return t('همین حالا', 'just now');
+			if (m < 60) return t(m + ' دقیقه پیش', m + ' min ago');
+			if (m < 2880) return t(Math.round(m / 60) + ' ساعت پیش', Math.round(m / 60) + ' h ago');
+			return t(Math.round(m / 1440) + ' روز پیش', Math.round(m / 1440) + ' days ago');
+		}
+		function showRemoteConfig(user, create) {
+			return call([ create ? 'remote-add' : 'remote-config', user ]).then(function(r) {
+				return L.require('uqr').catch(function() { return null; }).then(function(uqr) {
+					var qr = E('div', { 'class': 'mk-qr', 'dir': 'ltr' });
+					if (uqr) qr.innerHTML = uqr.renderSVG(r.config, { pixelSize: 5, whiteColor: '#ffffff', blackColor: '#000000' });
+					var download = btn(t('دانلود فایل تنظیمات', 'Download config file'), function() {
+						var a = E('a', { 'href': URL.createObjectURL(new Blob([ r.config + '\n' ], { type: 'text/plain' })), 'download': 'makhzan-' + user + '.conf' });
+						document.body.appendChild(a); a.click(); a.remove();
+					}, 'soft-blue', 'download');
+					modal(t('دسترسی از بیرون برای ', 'Remote access for ') + user, [
+						E('ol', { 'class': 'mk-steps' }, [
+							E('li', {}, t('برنامهٔ WireGuard را نصب کنید (اندروید: Google Play، آیفون: App Store، ویندوز و مک: wireguard.com).', 'Install the WireGuard app (Android: Google Play, iPhone: App Store, Windows and Mac: wireguard.com).')),
+							E('li', {}, t('در برنامه دکمهٔ + و سپس «Scan from QR code» را بزنید و این کد را اسکن کنید (یا فایل تنظیمات را وارد کنید).', 'In the app tap + then "Scan from QR code" and scan this code (or import the config file).')),
+							E('li', {}, t('تونل را روشن کنید.', 'Switch the tunnel on.')),
+							E('li', {}, [ t('فایل‌ها را مثل خانه باز کنید: در CX File Explorer یا Files به ', 'Open your files as at home: in CX File Explorer or Files connect to '), E('code', { 'dir': 'ltr' }, 'smb://' + r.lan_ip), t(' و در ویندوز به ', ', on Windows to '), E('code', { 'dir': 'ltr' }, '\\\\' + r.lan_ip + '\\' + user), '.' ])
+						]),
+						qr,
+						alertBox('warn', 'shield', t('این QR و فایل مثل رمز عبور است؛ آن را برای کس دیگری نفرستید. اگر گوشی گم شد، دسترسی را «لغو» کنید.', 'This QR code and file work like a password; never send them to anyone else. If the phone is lost, revoke the access.')),
+						E('details', {}, [ E('summary', {}, t('نمایش متن تنظیمات', 'Show configuration text')), E('pre', { 'class': 'mk-conf', 'dir': 'ltr' }, r.config) ]),
+						actions([ download, btn(t('بستن', 'Close'), ui.hideModal, 'soft-violet', 'x') ])
+					], 'qr');
+					return loadRemote();
+				});
+			});
+		}
+		function paintRemote(r) {
+			remoteBox.replaceChildren();
+			if (!r.installed) { remoteBox.appendChild(alertBox('warn', 'alert', t('WireGuard نصب نیست. بسته‌های kmod-wireguard و wireguard-tools را از System ← Software نصب کنید.', 'WireGuard is not installed. Install kmod-wireguard and wireguard-tools from System → Software.'))); return; }
+			if (r.wan_private) remoteBox.appendChild(alertBox('warn', 'alert', [
+				t('آدرس اینترنت این روتر خصوصی است (', 'This router\'s internet address is private ('), num(r.wan_ip || '—'),
+				t('): روتر پشت مودم دیگری است. در مودم اصلی پورت UDP ', '): it sits behind another modem. On that modem forward UDP port '), num(String(r.port)),
+				t(' را به ', ' to '), num(r.wan_ip || '—'),
+				t(' فوروارد کنید و در کادر زیر IP عمومی یا نام DDNS را بنویسید. اگر اینترنت شما IP عمومی ندارد (CGNAT)، این قابلیت کار نمی‌کند.', ' and enter the public IP or DDNS name below. Without a public IP (CGNAT) this feature cannot work.') ]));
+			if (!r.enabled) {
+				var ep = E('input', { 'dir': 'ltr', 'value': r.endpoint || '', 'placeholder': 'myhome.ddns.net', 'autocomplete': 'off' });
+				var port = E('input', { 'type': 'number', 'dir': 'ltr', 'min': '1024', 'max': '65535', 'value': String(r.port || 51820), 'class': 'mk-narrow' });
+				remoteBox.appendChild(field(t('آدرس عمومی روتر (IP عمومی یا نام DDNS)', 'Public address of the router (public IP or DDNS name)'), ep));
+				remoteBox.appendChild(field(t('پورت UDP', 'UDP port'), port));
+				remoteBox.appendChild(btn(t('روشن کردن دسترسی از بیرون', 'Turn on remote access'), function() {
+					return call([ 'remote-enable', ep.value.trim(), port.value ]).then(loadRemote);
+				}, 'primary', 'globe'));
+				return;
+			}
+			remoteBox.appendChild(E('div', { 'class': 'mk-alert ok' }, [ icon('shield'), E('span', {}, [ t('دسترسی از بیرون روشن است: ', 'Remote access is on: '), num(r.endpoint + ':' + r.port),
+				t(' — از راه تونل فقط فایل‌سرور در دسترس است.', ' — only the file server is reachable through the tunnel.') ]),
+				btn(t('خاموش کردن', 'Turn off'), function() {
+					if (!confirm(t('دسترسی از بیرون برای همهٔ کاربران قطع و همهٔ QR کدها باطل می‌شود. ادامه می‌دهید؟', 'Remote access stops for everyone and all QR codes become invalid. Continue?'))) return;
+					return call([ 'remote-disable' ]).then(loadRemote);
+				}, 'soft-red mk-small', 'x') ]));
+			if (!data.users.length) { remoteBox.appendChild(E('p', { 'class': 'mk-empty' }, [ icon('users'), t('اول در زبانهٔ کاربران یک کاربر بسازید.', 'Create a user on the Users tab first.') ])); return; }
+			data.users.forEach(function(u) {
+				var peer = (r.peers || []).filter(function(x) { return x.user === u.name; })[0];
+				remoteBox.appendChild(E('div', { 'class': 'mk-user' }, [
+					E('div', { 'class': 'mk-user-head' }, [ E('span', { 'class': 'mk-avatar' }, u.name.charAt(0).toUpperCase()), E('strong', { 'dir': 'ltr' }, u.name),
+						E('span', { 'class': 'mk-chips' }, peer ? [ E('span', { 'class': 'mk-chip ok' }, [ icon('check'), t('دارای دسترسی', 'Has access') ]), E('span', { 'class': 'mk-chip' }, [ icon('clock'), t('آخرین اتصال: ', 'Last connected: '), ago(peer.handshake) ]) ]
+							: [ E('span', { 'class': 'mk-chip' }, t('بدون دسترسی از بیرون', 'No remote access')) ]) ]),
+					E('div', { 'class': 'mk-row' }, peer ? [
+						btn(t('نمایش QR', 'Show QR'), function() { return showRemoteConfig(u.name, false); }, 'soft-blue', 'qr'),
+						btn(t('لغو دسترسی', 'Revoke'), function() {
+							if (!confirm(t('دسترسی از بیرون این کاربر لغو و QR قبلی باطل شود؟', 'Revoke this user\'s remote access and invalidate the old QR code?'))) return;
+							return call([ 'remote-remove', u.name ]).then(loadRemote);
+						}, 'soft-red', 'x') ] : [ btn(t('ساخت دسترسی و QR', 'Create access and QR'), function() { return showRemoteConfig(u.name, true); }, 'success', 'qr') ])
+				]));
+			});
+		}
+		var remoteCard = card(t('دسترسی از بیرون خانه (WireGuard)', 'Remote access from outside (WireGuard)'), [
+			E('p', { 'class': 'mk-muted' }, t('با WireGuard از هر جای دنیا به‌صورت رمزنگاری‌شده به فایل‌هایتان دسترسی دارید. هر کاربر QR مخصوص خودش را می‌گیرد. از راه تونل فقط فایل‌سرور (SMB) در دسترس است و بقیهٔ شبکه و تنظیمات روتر بسته می‌مانند.', 'With WireGuard you reach your files from anywhere, encrypted. Every user gets their own QR code. Only the file server (SMB) is reachable through the tunnel; the rest of the network and the router settings stay closed.')),
+			remoteBox
+		], '#6366f1', 'globe');
+
+		/* ---------- Space usage (Home tab) ---------- */
+		var usageBox = E('div');
+		var usageCard = card(t('مصرف فضای فایل‌سرور', 'File server space usage'), [ usageBox ], '#3b82f6', 'pie');
+		function paintUsage(d) {
+			usageBox.replaceChildren();
+			if (!d.disk) { usageBox.appendChild(E('p', { 'class': 'mk-empty' }, [ icon('drive'), t('حافظه آماده نیست.', 'Storage is not ready.') ])); return; }
+			var u = d.usage, total = d.disk.total_kib || 1;
+			if (!u) { usageBox.appendChild(E('p', { 'class': 'mk-muted' }, t('در حال محاسبهٔ مصرف فضا…', 'Calculating space usage…'))); return; }
+			var rows = [];
+			Object.keys(u.users || {}).forEach(function(n) { rows.push([ E('span', {}, [ t('کاربر ', 'User '), E('bdi', { 'dir': 'ltr' }, n) ]), u.users[n], '#8b5cf6', 'user' ]); });
+			rows.push([ 'Shared', u.shared_kib, '#10b981', 'users' ], [ 'Media', u.media_kib, '#ec4899', 'tv' ], [ t('سطل بازیابی', 'Recovery trash'), u.trash_kib, '#ef4444', 'trash' ]);
+			var known = rows.reduce(function(sum, r) { return sum + r[1]; }, 0);
+			rows.push([ t('سیستم و سایر', 'System and other'), Math.max(0, d.disk.used_kib - known), '#94a3b8', 'layers' ]);
+			rows.sort(function(a, b) { return b[1] - a[1]; }).forEach(function(r) {
+				usageBox.appendChild(E('div', { 'class': 'mk-urow' }, [
+					E('span', { 'class': 'mk-urow-name' }, [ icon(r[3]), r[0] ]),
+					E('div', { 'class': 'mk-track' }, E('i', { 'style': 'width:' + Math.min(100, r[1] * 100 / total) + '%;background:' + r[2] })),
+					E('strong', {}, num(bytes(r[1]))) ]));
+			});
+			usageBox.appendChild(E('small', {}, [ t('فضای آزاد: ', 'Free: '), num(bytes(d.disk.available_kib)), ' · ', t('هر ۵ دقیقه به‌روز می‌شود.', 'Updated every 5 minutes.') ]));
+		}
+
+		/* ---------- Tabs ---------- */
+		var tabBar = E('div', { 'class': 'mk-tabs', 'role': 'tablist' }), panels = {}, tabButtons = {}, loaders = {}, activeTab = 'home';
+		try { activeTab = localStorage.getItem('makhzan-tab') || 'home'; } catch (e) {}
+		function showTab(id) {
+			if (!panels[id]) id = 'home';
+			activeTab = id;
+			Object.keys(panels).forEach(function(k) {
+				panels[k].hidden = k !== id;
+				tabButtons[k].classList.toggle('mk-tab-on', k === id);
+				tabButtons[k].setAttribute('aria-selected', k === id ? 'true' : 'false');
+			});
+			try { localStorage.setItem('makhzan-tab', id); } catch (e) {}
+			if (loaders[id]) loaders[id]();
+		}
+		function addTab(id, label, ico, content, loader) {
+			tabButtons[id] = E('button', { 'type': 'button', 'class': 'mk-tab', 'role': 'tab', 'click': function() { showTab(id); } }, [ icon(ico), E('span', {}, label) ]);
+			tabBar.appendChild(tabButtons[id]);
+			panels[id] = E('div', { 'class': 'mk-panel', 'role': 'tabpanel' }, content);
+			if (loader) loaders[id] = loader;
+		}
+		addTab('home', t('خانه', 'Home'), 'home', [ metrics, usageCard ]);
+		addTab('users', t('کاربران', 'Users'), 'users', [ users ]);
+		addTab('services', t('سرویس‌ها', 'Services'), 'pulse', [ services ]);
+		addTab('disk', t('دیسک', 'Disk'), 'drive', [ planner, libraryCard, E('div', { 'class': 'mk-columns' }, [ maintenance, storageCard ]) ], loadLibrary);
+		addTab('remote', t('دسترسی از بیرون', 'Remote access'), 'globe', [ remoteCard ], loadRemote);
+		addTab('trash', t('سطل بازیابی', 'Recovery trash'), 'trash', [ trash ], loadTrash);
+
 		paint(data);
-		root.appendChild(E('div', { 'class': 'mk-columns' }, [ services, users ]));
-		root.appendChild(planner);
-		root.appendChild(E('div', { 'class': 'mk-columns' }, [ storageCard, trash ]));
+		root.appendChild(tabBar);
+		Object.keys(panels).forEach(function(k) { root.appendChild(panels[k]); });
+		showTab(activeTab);
 		root.appendChild(E('div', { 'class': 'mk-footer' }, [
 			logo(28),
 			E('div', {}, 'Makhzan ' + VERSION + ' · Copyright © 2026 dreamboxone · GNU GPLv3 · ' + t('بدون ضمانت', 'No warranty')),
@@ -636,7 +932,9 @@ return view.extend({
 					else return refresh();
 				}).catch(function() {});
 			}
-			if (ticks % 5 === 0) return refresh().catch(function() {});
+			if (ticks % 5 === 0) return refresh().then(function() {
+				if (activeTab === 'trash' || activeTab === 'disk' || (activeTab === 'remote' && remoteState && remoteState.enabled)) return loaders[activeTab]();
+			}).catch(function() {});
 		};
 		poll.add(tick, 3);
 		return root;

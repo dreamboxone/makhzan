@@ -22,6 +22,15 @@ makhzan_usb_device() {
  [ ! -e "$usb_parent/dm" ] || return 1
  return 0
 }
+# Runs a command fully detached (own session, no terminal signals): rpcd kills commands after 30 s
+# and package scripts may exit before background work finishes.
+makhzan_spawn() {
+ if command -v setsid >/dev/null; then
+  setsid "$@" </dev/null >/dev/null 2>&1 &
+ else
+  ( trap '' HUP INT TERM; exec "$@" ) </dev/null >/dev/null 2>&1 &
+ fi
+}
 # BusyBox on OpenWrt has no mountpoint(1); /proc/mounts is authoritative.
 makhzan_mounted() {
  awk -v m="$1" '$2==m {found=1} END {exit !found}' /proc/mounts
