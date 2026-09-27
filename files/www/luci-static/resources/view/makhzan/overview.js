@@ -239,7 +239,9 @@ function mbToMiB(mb) { return Math.ceil(Number(mb || 0) / 1.048576); }
 
 return view.extend({
 	load: function() {
-		return Promise.all([ call([ 'status' ]), call([ 'storage-devices' ]).catch(function() { return { devices: [] }; }) ]);
+		return call([ 'storage-ready' ]).catch(function() {}).then(function() {
+			return Promise.all([ call([ 'status' ]), call([ 'storage-devices' ]).catch(function() { return { devices: [] }; }) ]);
+		});
 	},
 
 	render: function(initial) {
@@ -484,6 +486,7 @@ return view.extend({
 		function paint(d) {
 			data = d;
 			var disk = d.disk, pct = disk && disk.total_kib ? Math.min(100, disk.used_kib * 100 / disk.total_kib) : 0, s = d.services;
+			if (!pathEdited && document.activeElement !== path) path.value = disk ? disk.root : '';
 			fullBox.replaceChildren();
 			if (disk && pct >= 97) fullBox.appendChild(alertBox('error', 'alert', [ t('فضای فایل‌سرور تقریباً پر است (', 'The file server is almost full ('), num(Math.round(pct) + '%'), t('). فایل‌های اضافی یا سطل بازیابی را پاک کنید؛ در غیر این صورت ذخیرهٔ فایل ناموفق می‌شود.', '). Delete unneeded files or empty the recovery trash, otherwise saving files will fail.') ]));
 			else if (disk && pct >= 90) fullBox.appendChild(alertBox('warn', 'alert', [ t('بیش از ۹۰٪ فضای فایل‌سرور پر شده است (', 'More than 90% of the file server is used ('), num(Math.round(pct) + '%'), t('). نمودار «مصرف فضا» در زبانهٔ خانه نشان می‌دهد چه چیزی بیشترین جا را گرفته.', '). The space usage chart on the Home tab shows what takes the most room.') ]));
@@ -549,10 +552,12 @@ return view.extend({
 		}
 
 		/* ---------- Existing storage ---------- */
-		var path = E('input', { 'placeholder': '/mnt/your-disk', 'dir': 'ltr', 'aria-label': t('مسیر حافظه', 'Storage path') });
+		var pathEdited = false;
+		var path = E('input', { 'placeholder': '/mnt/your-disk', 'dir': 'ltr', 'aria-label': t('مسیر حافظه', 'Storage path'), 'input': function() { pathEdited = true; } });
 		var storageCard = card(t('حافظهٔ آماده (بدون پاک‌کردن)', 'Existing storage (no erase)'), [
-			E('p', { 'class': 'mk-muted' }, t('اگر دیسک USB از قبل با ext4 فرمت و mount شده، مسیر آن را وارد کنید؛ فایل‌های موجود حفظ می‌شوند.', 'If a USB disk is already formatted as ext4 and mounted, enter its mount path; existing files are kept.')),
-			E('div', { 'class': 'mk-row mk-add' }, [ path, btn(t('انتخاب حافظه', 'Select storage'), function() { return call([ 'root', path.value.trim() ]).then(refresh); }, 'primary', 'check') ])
+			E('p', { 'class': 'mk-muted' }, t('دیسک قبلی مخزن هنگام بازکردن صفحه خودکار mount می‌شود و مسیرش در این کادر قرار می‌گیرد. برای دیسک دیگری که از قبل فرمت و mount شده، مسیر آن را وارد کنید؛ فایل‌های موجود حفظ می‌شوند.', 'Opening this page mounts the previously configured NAS disk and fills in its path. For another already formatted and mounted USB disk, enter its mount path; existing files are kept.')),
+			E('div', { 'class': 'mk-row mk-add' }, [ path, btn(t('انتخاب حافظه', 'Select storage'), function() { return call([ 'root', path.value.trim() ]).then(function() { pathEdited = false; return refresh(); }); }, 'primary', 'check'),
+				btn(t('اتصال دوبارهٔ دیسک قبلی', 'Reconnect previous disk'), function() { return call([ 'storage-ready' ]).then(function() { pathEdited = false; return refresh(); }); }, 'soft-blue', 'drive') ])
 		], '#3b82f6', 'drive');
 
 		/* ---------- Disk planner ---------- */

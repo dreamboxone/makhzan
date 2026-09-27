@@ -2,6 +2,10 @@
 
 ## مخزن @TAG@ — فایل‌سرور خانگی برای OpenWrt
 
+در این نسخه حذف برنامه حساب‌ها، رمزها، تنظیمات و کل پوشهٔ موقت مخزن را پاک می‌کند و پوشه‌های خصوصی روی دیسک متصل را به سطل بازیابی می‌برد. نصب دوباره، دیسک NAS قبلی را از تنظیمات ذخیره‌شده وصل و کادر مسیر «حافظهٔ آماده» را پر می‌کند؛ شناسهٔ قبلی گروه در صورت آزادبودن بازیابی می‌شود.
+
+> **برای ارتقا، نسخهٔ جدید را روی قبلی نصب کنید و اول حذف نکنید**.
+
 یک بسته برای **همهٔ معماری‌ها**: مخزن کد کامپایل‌شده ندارد، پس همین فایل‌ها روی همهٔ روترها نصب می‌شوند.
 
 | پردازنده | OpenWrt 25.12 و جدیدتر | OpenWrt 24.10 و قدیمی‌تر |
@@ -36,6 +40,10 @@ opkg install /tmp/@IPK@
 ---
 
 ## Makhzan @TAG@ — home NAS for OpenWrt
+
+Removal now clears managed accounts, passwords, settings and the entire temporary directory, moving private homes on an available disk to recovery trash. Reinstalling reconnects the saved NAS disk, fills its path in Existing storage and reuses the former group ID when available.
+
+> **To upgrade, install the new version over the existing one; do not uninstall first.**
 
 One architecture-independent package (`@VERSION@`) for **ARMv7, ARMv8/ARMv9 (aarch64) and x86-64** (and other targets):
 

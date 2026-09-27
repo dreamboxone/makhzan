@@ -72,3 +72,18 @@ Same device, plus a second USB disk formatted NTFS on Windows (media library tes
 | UI | Tab order Home, Disk, Users, Services, Remote access, Recovery trash; first visit without ready storage opens Disk; Home and Users show "prepare the disk" with a button to the Disk tab | Pass (UI preview) |
 | UI | With SMB off the Users tab offers "Turn on SMB" (creating a user with SMB off is refused by the backend) | Pass |
 | UI | Traced wordmark logo in the hero (white/cyan) and footer (indigo-violet/cyan, light variant in dark mode); README logo with light/dark variants; phone width without horizontal scroll | Pass (UI preview) |
+
+## Version 1.2.0-r5 (2026-09-27)
+
+Same Google WiFi device on OpenWrt 25.12.5. The package had already been removed; the previous NAS entry remained in fstab and its disk was connected but unmounted. Earlier removal/reinstall results above describe the older releases, whose account-preservation behavior has changed in r5.
+
+| Area | Test | Result |
+|---|---|---|
+| Build | APK and IPK rebuilt with local OpenWrt SDKs; shell/JavaScript syntax, all 115 backend translations and diff whitespace checked | Pass |
+| Package | Install rebuilt r5 APK with missing dependencies; installed package checksum matches local artifact | Pass |
+| Storage/UI | Open the actual LuCI page with NAS unmounted: old USB ext4 partition reconnects at `/mnt/makhzan`, status reports ready and Existing storage contains the same path | Pass |
+| Trash | Previous private homes for `ali` and `kid` remain in recovery trash; managed account list is empty after reinstall | Pass |
+| Group | Recreated `makhzan` group has GID `32769`, matching the numeric ownership retained on Shared, Media and the old homes | Pass |
+| Removal | Isolated-container CI covers removal of all runtime files, config, managed account and group; saved fstab and disk-folder fixture retained; reinstall restores defaults and previous free GID | Automated regression in `.github/scripts/smoke-test.sh` |
+
+The live router was not repartitioned, and its recovery trash was not restored or emptied during this verification. SMB/DLNA settings remain off after the fresh installation, as expected after complete removal.

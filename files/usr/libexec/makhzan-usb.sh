@@ -49,19 +49,30 @@ makhzan_usb_mount() {
  usb_source=$(awk -v m="$usb_mount" '$2==m && $3 ~ /^(ext[234]|btrfs|xfs)$/ && $4 ~ /(^|,)rw(,|$)/ {print $1; exit}' /proc/mounts)
  [ -n "$usb_source" ] && makhzan_usb_device "$usb_source"
 }
+# After a complete removal and reinstall, the group takes back the id that still owns the NAS folders ($1),
+# so files left in Shared and Media stay readable; otherwise the next free system group id is used.
 makhzan_group() {
- grep -q '^makhzan:' /etc/group || { . /lib/functions.sh; group_add_next makhzan >/dev/null; }
+ grep -q '^makhzan:' /etc/group && return 0
+ . /lib/functions.sh
+ grp_old=$([ -n "$1" ] && ls -ldn "$1" 2>/dev/null | awk '{print $4}')
+ case "$grp_old" in ''|*[!0-9]*) grp_old='';; esac
+ if [ -n "$grp_old" ] && [ "$grp_old" -ge 1000 ] && ! cut -d: -f3 /etc/group | grep -qx "$grp_old"; then
+  group_add makhzan "$grp_old"
+ else
+  group_add_next makhzan >/dev/null
+ fi
  grep -q '^makhzan:' /etc/group
 }
 # NAS layout: users/ (0711 root), shared/ (2770 root:makhzan), media/ (2775 root:makhzan, DLNA readable), trash (0700 root).
 makhzan_layout() {
  lay_root=$1
- makhzan_usb_mount "$lay_root" && makhzan_group || return 1
+ makhzan_usb_mount "$lay_root" || return 1
  for lay_dir in users shared media .makhzan-trash; do
   [ ! -L "$lay_root/$lay_dir" ] || return 1
   [ -e "$lay_root/$lay_dir" ] || mkdir "$lay_root/$lay_dir" || return 1
   makhzan_same_fs "$lay_root" "$lay_root/$lay_dir" || return 1
  done
+ makhzan_group "$lay_root/shared" || return 1
  chmod a+x "$lay_root" &&
  chown root:root "$lay_root/users" "$lay_root/.makhzan-trash" && chmod 0711 "$lay_root/users" && chmod 0700 "$lay_root/.makhzan-trash" &&
  chown root:makhzan "$lay_root/shared" "$lay_root/media" && chmod 2770 "$lay_root/shared" && chmod 2775 "$lay_root/media" || return 1

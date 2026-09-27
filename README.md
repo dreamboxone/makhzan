@@ -125,6 +125,8 @@ opkg install /tmp/luci-app-makhzan_*_all.ipk
 
 > **بعد از نصب یا ارتقا:** یک بار از LuCI خارج شوید (Log out) و دوباره وارد شوید تا مجوزهای جدید اعمال شود. هنگام ارتقا از نسخهٔ 1.0.0 صفحه را یک بار هم با `Ctrl+F5` تازه کنید.
 
+> **برای ارتقا، نسخهٔ جدید را روی قبلی نصب کنید و اول حذف نکنید**. حذف از r5 به بعد حساب‌ها، رمزهای کاربران و تنظیمات مخزن را پاک می‌کند؛ نصب مستقیم نسخهٔ جدید آن‌ها را نگه می‌دارد.
+
 ## حذف برنامه
 
 <div dir="ltr">
@@ -138,32 +140,21 @@ opkg remove luci-app-makhzan    # OpenWrt 24.10 and older
 
 یا از **System ← Software** روی **Remove** بزنید.
 
-هنگام حذف، مخزن به‌طور خودکار:
+از نسخهٔ **1.2.0-r5**، هنگام حذف مخزن به‌طور خودکار:
 
-- اشتراک‌های SMB ساخته‌شده توسط خودش را حذف می‌کند،
-- تنظیمات «پنهان‌کردن اشتراک‌ها» و «unix extensions» را از قالب Samba برمی‌دارد. پایگاه رمز Samba روی `tdbsam` می‌ماند تا رمز کاربران از بین نرود،
-- اگر MiniDLNA را برای پوشهٔ Media روشن کرده بود، آن را خاموش می‌کند.
+- حساب‌های ساخته‌شده توسط مخزن، رمزهای Samba آن‌ها و گروه `makhzan` را حذف می‌کند.
+- اگر دیسک NAS متصل و قابل دسترس باشد، پوشهٔ خصوصی هر کاربر را به `.makhzan-trash/<username>/home:…` روی همان دیسک منتقل می‌کند. اگر دیسک در دسترس نباشد، فایل‌ها در محل قبلی باقی می‌مانند؛ انتقال به سطل انجام نمی‌شود.
+- اشتراک‌های SMB و تنظیمات اضافه‌شده به قالب Samba را برمی‌دارد؛ `tdbsam` فقط وقتی باقی می‌ماند که حساب دیگری خارج از مخزن هنوز در آن وجود داشته باشد.
+- سرویس DLNA مدیریت‌شده، تنظیمات خواب دیسک و دسترسی WireGuard مخزن را غیرفعال/پاک می‌کند و دیسک کتابخانهٔ فقط‌خواندنی را آزاد می‌کند.
+- تنظیمات `/etc/config/makhzan` و **کل پوشهٔ `/tmp/run/makhzan`**، شامل رمزهای یک‌بارمصرف باقی‌مانده، کش مصرف فضا و فایل‌های موقت را پاک می‌کند.
 
-**برای حفاظت از اطلاعات شما این‌ها باقی می‌مانند:** فایل‌های روی دیسک USB، حساب و رمز کاربران (با نصب دوباره همه‌چیز خودکار برمی‌گردد) و تنظیمات mount دیسک در `/etc/config/fstab`.
+**این‌ها باقی می‌مانند:** فایل‌های روی دیسک USB، پوشه‌های Shared و Media، سطل بازیابی، پارتیشن‌های NAS/swap/extroot و تنظیمات mount آن‌ها در `/etc/config/fstab`. حذف برنامه دیسک را فرمت نمی‌کند و extroot فعال را از کار نمی‌اندازد.
+
+> **برای ارتقا، نسخهٔ جدید را روی قبلی نصب کنید و اول حذف نکنید**.
+
+**بعد از نصب دوباره:** صفحهٔ مخزن را باز کنید. اگر دیسک قبلی وصل باشد و تنظیم NAS آن در `fstab` فعال باشد، خودکار mount می‌شود و مسیرش در بخش **حافظهٔ آماده (بدون پاک‌کردن)** پر می‌شود؛ برای تلاش دوباره پس از وصل‌کردن دیسک، دکمهٔ **اتصال دوبارهٔ دیسک قبلی** را بزنید. شناسهٔ قبلی گروه از مالکیت پوشهٔ Shared بازیابی می‌شود، به شرط آن‌که گروه دیگری آن شناسه را نگرفته باشد. سرویس‌ها و کاربران را دوباره بسازید؛ برای بازیابی پوشهٔ خصوصی قبلی، کاربری با همان نام بسازید و از **سطل بازیابی** استفاده کنید. حساب‌ها و رمزهای حذف‌شده خودکار برنمی‌گردند.
 
 > **نکته دربارهٔ apk:** دستور `apk del` بسته‌هایی را که همراه مخزن نصب شده بودند (مثل `block-mount` و `parted`) هم حذف می‌کند و در نتیجه دیسک USB به‌طور امن unmount می‌شود (اطلاعات سالم می‌ماند). اگر می‌خواهید بعد از حذف مخزن، دیسک همچنان mount بماند، قبل از حذف این دستور را بزنید: `apk add block-mount e2fsprogs`
-
-**پاک‌سازی کامل (اختیاری، بعد از حذف بسته):**
-
-<div dir="ltr">
-
-```sh
-# remove Makhzan user accounts (their files on the USB disk are NOT deleted)
-for u in $(awk -F: '$5=="makhzan" && $3>=1000 {print $1}' /etc/passwd); do
-  smbpasswd -x "$u"; sed -i "/^$u:/d" /etc/passwd /etc/shadow
-done
-sed -i '/^makhzan:/d' /etc/group
-# stop auto-mounting the Makhzan partitions
-uci -q delete fstab.makhzan_nas; uci -q delete fstab.makhzan_swap; uci -q delete fstab.makhzan_extroot; uci commit fstab
-rm -f /etc/config/makhzan
-```
-
-</div>
 
 ## راه‌اندازی قدم‌به‌قدم
 
@@ -291,7 +282,7 @@ rm -f /etc/config/makhzan
 - اگر USB حاوی extroot جدا شود، روتر با حافظهٔ داخلی (تنظیمات قبل از extroot) بالا می‌آید.
 
 **Samba و ورود**
-- مخزن چهار تنظیم به قالب Samba (`/etc/samba/smb.conf.template`) اضافه می‌کند: پایگاه رمز `tdbsam` (برای قفل ورود)، پنهان‌کردن اشتراک‌های غیرمجاز، خاموش‌کردن `unix extensions` و `map to guest = Never` (رد کاربر ناشناس به‌جای ورود مهمان، تا ویندوز پنجرهٔ رمز را نشان دهد). این تنظیمات روی **سایر اشتراک‌های Samba روتر هم اثر دارند**؛ اشتراک مهمان (بدون رمز) دیگر کار نمی‌کند. با حذف برنامه همه به‌جز `tdbsam` برداشته می‌شوند تا رمزها از بین نروند.
+- مخزن چهار تنظیم به قالب Samba (`/etc/samba/smb.conf.template`) اضافه می‌کند: پایگاه رمز `tdbsam` (برای قفل ورود)، پنهان‌کردن اشتراک‌های غیرمجاز، خاموش‌کردن `unix extensions` و `map to guest = Never` (رد کاربر ناشناس به‌جای ورود مهمان، تا ویندوز پنجرهٔ رمز را نشان دهد). این تنظیمات روی **سایر اشتراک‌های Samba روتر هم اثر دارند**؛ اشتراک مهمان (بدون رمز) دیگر کار نمی‌کند. هنگام حذف، حساب‌های مخزن و این تنظیمات حذف می‌شوند؛ `tdbsam` فقط برای حفظ حساب‌های باقی‌ماندهٔ خارج از مخزن نگه داشته می‌شود.
 - تنظیم قفل ورود در RAM نگه‌داری می‌شود و در هر بوت دوباره اعمال می‌شود؛ در چند ثانیهٔ اول بوت (قبل از اجرای مخزن) قفل فعال نیست.
 - زمان قفل با ساعت روتر محاسبه می‌شود؛ روتر باید ساعت درست (NTP) داشته باشد.
 - قفل ورود فقط روی SMB اعمال می‌شود (رمز ورود LuCI و SSH جداست).
@@ -403,6 +394,8 @@ opkg install /tmp/luci-app-makhzan_*_all.ipk
 
 Or upload the package in **System → Software**. Log out of LuCI and log in again once (rpcd grants the new permissions at login), then open **Services → Makhzan**. When upgrading from 1.0.0, also reload the page once with Ctrl+F5.
 
+> **To upgrade, install the new version over the existing one; do not uninstall first.** Starting with r5, removal deletes Makhzan accounts, passwords and settings. An in-place upgrade keeps them.
+
 ## Remove
 
 ```sh
@@ -410,7 +403,15 @@ apk del luci-app-makhzan        # OpenWrt 25.12+
 opkg remove luci-app-makhzan    # OpenWrt 24.10 and older
 ```
 
-Removal deletes Makhzan's SMB shares, removes the settings Makhzan added to the Samba template except `tdbsam` (the password database stays, so no password is lost) and disables MiniDLNA if Makhzan enabled it. Your files, user accounts with their passwords and the fstab mount entries are kept on purpose; reinstalling restores everything automatically. Note: `apk del` also removes dependencies that were installed with Makhzan (such as `block-mount`), which cleanly unmounts the USB disk; run `apk add block-mount e2fsprogs` first if the disk should stay mounted. See the Persian section for optional full-cleanup commands.
+Starting with **1.2.0-r5**, removal deletes Makhzan-managed accounts and their Samba passwords, the `makhzan` group, its SMB shares, settings in `/etc/config/makhzan`, and the **entire `/tmp/run/makhzan` directory**, including abandoned password tokens and usage-cache files. Private homes on an available NAS disk move to `.makhzan-trash/<username>/home:…` on that disk. If the disk is unavailable, files remain at their original locations instead of moving to the trash.
+
+Removal also undoes Makhzan's Samba template changes (`tdbsam` is retained only if it still contains unrelated accounts), disables its DLNA/spin-down configuration and WireGuard access, and releases the read-only media-library mount. USB files, Shared, Media, recovery trash, NAS/swap/extroot partitions and their `fstab` mount entries remain. Removal does not format the disk or disable an active extroot.
+
+> **To upgrade, install the new version over the existing one; do not uninstall first.**
+
+After reinstalling, open Makhzan. If the old NAS disk is connected and its saved `fstab` entry is enabled, it mounts automatically and its path fills the **Existing storage (no erase)** field. Use **Reconnect previous disk** to retry after plugging it in. The group reuses the ID owning Shared if that ID is still free. Set up services and users again; recreate each original username to restore its old home from **Recovery trash**. Deleted accounts and passwords are not restored automatically.
+
+`apk del` can also remove dependencies installed with Makhzan (such as `block-mount`), which unmounts the USB disk. Run `apk add block-mount e2fsprogs` first if these packages should remain installed.
 
 ## Quick start
 

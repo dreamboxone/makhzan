@@ -96,6 +96,28 @@ ensure_layout() {
 	root_remount || { fail 'USB storage is not ready: select a mounted USB ext4 disk'; return 1; }
 	makhzan_layout "$(root)" || { fail 'Unsafe storage layout'; return 1; }
 }
+# Reconnect only the saved NAS on page load. Do not run this from status polling: a disk released by
+# the administrator must stay released. After removal, fstab retains its UUID and custom mount path.
+storage_ready() {
+	if ! valid_root; then
+		[ "$(uci -q get fstab.makhzan_nas.enabled)" = 1 ] || { ok ',"root":""'; return; }
+		r=$(uci -q get fstab.makhzan_nas.target)
+		case "$r" in /mnt/*|/srv/*) ;; *) ok ',"root":""'; return;; esac
+		[ "$(readlink -f "$r")" = "$r" ] && [ ! -L "$r" ] || { ok ',"root":""'; return; }
+		if ! makhzan_usb_mount "$r"; then
+			# Verify the saved UUID belongs to a physical USB device before attempting its mount.
+			saved_uuid=$(uci -q get fstab.makhzan_nas.uuid)
+			[ -n "$saved_uuid" ] || { ok ',"root":""'; return; }
+			saved_dev=$(block info 2>/dev/null | awk -v id="$saved_uuid" 'index($0, " UUID=\"" id "\"") {sub(/:$/, "", $1); print $1; exit}')
+			makhzan_usb_device "$saved_dev" || { ok ',"root":""'; return; }
+			block mount >/dev/null 2>&1
+			makhzan_usb_mount "$r" || { ok ',"root":""'; return; }
+		fi
+	fi
+	makhzan_layout "$r" || { fail 'Unsafe storage layout'; return; }
+	[ "$(root)" = "$r" ] || { uci set makhzan.main.root="$r"; uci commit makhzan; }
+	ok ",\"root\":\"$(quote "$r")\""
+}
 # The read-only media library disk is used only while it is mounted from a physical USB partition.
 library_ready() {
 	src=$(awk -v m="$LIB_TARGET" '$2==m {print $1; exit}' /proc/mounts)
@@ -217,13 +239,13 @@ smb_template_on() {
 	# Regenerate smb.conf now so smbpasswd/pdbedit use tdbsam immediately.
 	[ "$changed" = 0 ] || smb_restart
 }
-# On removal, drop the share-visibility settings but keep tdbsam: accounts created under tdbsam cannot be
-# exported back to the smbpasswd format, so reverting would lose NAS users' passwords.
+# Drop Makhzan's settings from the template. tdbsam stays unless "all" is given: accounts created under
+# tdbsam cannot be exported back to the smbpasswd format, so it is only reverted when no accounts remain.
 smb_template_off() {
 	[ -f "$SMB_TEMPLATE" ] || return 0
-	awk '
+	awk -v all="$1" '
 		/## makhzan-managed/ { marker=$0; next }
-		marker != "" { if ($0 ~ /passdb backend = tdbsam/) { print marker; print } marker=""; next }
+		marker != "" { if (all == "" && $0 ~ /passdb backend = tdbsam/) { print marker; print } marker=""; next }
 		{ print }
 	' "$SMB_TEMPLATE" > "$SMB_TEMPLATE.makhzan" && mv -f "$SMB_TEMPLATE.makhzan" "$SMB_TEMPLATE"
 }
@@ -619,23 +641,55 @@ boot() {
 	done
 	logger -t makhzan "Automatic apply failed: $result"
 }
+# Package removal (not upgrade) is complete: Makhzan's users, their Samba passwords and all Makhzan settings are
+# deleted. Files on the disks are kept; every private folder moves to the recovery trash on the NAS, so the same
+# usernames can be created again after a reinstall and the old files restored. The NAS, swap and extroot
+# partitions stay as they are: they are disk layout, and the router may be running from the extroot.
 uninstall() {
+	cfg_root=$(root); r=$cfg_root; root_remount || r=''
+	for u in $(managed_users); do
+		h="$r/users/$u"
+		if [ -n "$r" ] && [ -d "$h" ] && [ ! -L "$h" ] && makhzan_same_fs "$r" "$h" &&
+			mkdir -p -m 0700 "$r/.makhzan-trash/$u" && makhzan_same_fs "$r" "$r/.makhzan-trash/$u"; then
+			mv -n -T "$h" "$r/.makhzan-trash/$u/home:$(date +%Y%m%d-%H%M%S).$$"
+		fi
+		smb_installed && smbpasswd -x "$u" >/dev/null 2>&1
+		# Also drop stale entries from the old smbpasswd file, which Samba uses again once tdbsam is reverted.
+		[ ! -f /etc/samba/smbpasswd ] || sed -i "/^$u:/d" /etc/samba/smbpasswd
+		account_remove "$u"
+	done
+	sed -i '/^makhzan:/d' /etc/group
 	if smb_installed; then
 		smb_clear
 		[ "$(uci -q get makhzan.main.tm_macos)" != 1 ] || uci set samba4.@samba[0].macos=0
-		uci commit samba4; smb_template_off; /etc/init.d/samba4 restart >/dev/null 2>&1
+		uci commit samba4
+		pdbedit -P 'bad lockout attempt' -C 0 >/dev/null 2>&1
+		# Keep tdbsam only when it still holds accounts that Makhzan did not create.
+		if [ -z "$(pdbedit -L 2>/dev/null)" ]; then smb_template_off all; else smb_template_off; fi
+		/etc/init.d/samba4 restart >/dev/null 2>&1
 	fi
-	r=$(root)
-	if [ -n "$r" ] && uci -q get minidlna.config >/dev/null; then
-		case " $(uci -q get minidlna.config.media_dir) " in *" $r/media "*)
+	if command -v minidlnad >/dev/null && uci -q get minidlna.config >/dev/null; then
+		case " $(uci -q get minidlna.config.media_dir) " in *" $cfg_root/media "*|*" $LIB_TARGET "*)
+			uci -q del_list minidlna.config.media_dir="$cfg_root/media"; uci -q del_list minidlna.config.media_dir="$LIB_TARGET"
+			[ "$(uci -q get minidlna.config.friendly_name)" != Makhzan ] || uci set minidlna.config.friendly_name='OpenWrt DLNA Server'
 			uci set minidlna.config.enabled=0; uci commit minidlna; /etc/init.d/minidlna stop >/dev/null 2>&1;;
 		esac
+	fi
+	# The media library is a read-only mount made for Makhzan: release it so the disk can be unplugged.
+	if uci -q get fstab.makhzan_library >/dev/null || makhzan_mounted "$LIB_TARGET"; then
+		sync; ! makhzan_mounted "$LIB_TARGET" || umount "$LIB_TARGET" 2>/dev/null || umount -l "$LIB_TARGET" 2>/dev/null
+		rmdir "$LIB_TARGET" 2>/dev/null
+		uci -q delete fstab.makhzan_library; uci commit fstab
 	fi
 	if spindown_supported && uci -q get hd-idle.makhzan >/dev/null; then
 		uci -q delete hd-idle.makhzan; uci commit hd-idle; /etc/init.d/hd-idle restart >/dev/null 2>&1
 	fi
 	# A remote-access port must not stay open once Makhzan is gone.
 	[ ! -x /usr/libexec/makhzan-remote ] || /usr/libexec/makhzan-remote disable >/dev/null 2>&1
+	rm -f /etc/config/makhzan
+	# Includes abandoned password tokens, usage cache, temporary files and the usage scan lock.
+	# Keep this literal path: no configurable NAS path may ever reach this recursive cleanup.
+	rm -rf /tmp/run/makhzan
 	return 0
 }
 
@@ -652,6 +706,7 @@ case "$1" in
 	storage-apply) /usr/libexec/makhzan-storage apply "$2" "$3" "$4" "$5" "$6";;
 	storage-job) /usr/libexec/makhzan-storage job;;
 	storage-release) /usr/libexec/makhzan-storage release "$2";;
+	storage-ready) storage_ready;;
 	root) set_root "$2";;
 	add-user) add_user "$2" "$3" "$4";;
 	passwd) set_password "$2" "$3";;
