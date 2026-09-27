@@ -75,7 +75,9 @@
 
 /* Cards */
 .mk-card{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:22px;margin-bottom:20px;box-shadow:var(--shadow);min-width:0;position:relative}
-.mk-card::before{content:"";position:absolute;inset:0 0 auto 0;height:4px;border-radius:20px 20px 0 0;background:linear-gradient(90deg,var(--accent,#3b82f6),color-mix(in srgb,var(--accent,#3b82f6) 45%,#ffffff))}
+/* Accent bar: a full-size layer with the card's own radius, masked to the top 5px, so its ends follow the rounded corners. */
+.mk-card::before,.mk-plan > div::before{content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none;background:linear-gradient(90deg,var(--accent,#3b82f6),color-mix(in srgb,var(--accent,#3b82f6) 45%,#ffffff));
+	-webkit-mask:linear-gradient(#000 0 0) top/100% 5px no-repeat;mask:linear-gradient(#000 0 0) top/100% 5px no-repeat}
 .mk-card-title{display:flex;align-items:center;gap:12px;font-size:18px;font-weight:800}
 .mk-badge-ico{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:12px;color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
 .mk-badge-ico .mk-ico{width:22px;height:22px}
@@ -134,7 +136,7 @@
 .mk-track i{display:block;height:100%;transition:width .25s}
 .mk-summary{font-weight:700}
 .mk-plan{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0}
-.mk-plan div{border:1px solid var(--line);border-top:4px solid var(--accent);border-radius:12px;padding:10px;text-align:center}
+.mk-plan > div{position:relative;border:1px solid var(--line);border-radius:12px;padding:13px 10px 10px;text-align:center}
 .mk-plan b{display:block}
 
 /* Alerts */
@@ -255,7 +257,8 @@
 .mk details summary{cursor:pointer;font-weight:700;color:var(--muted);margin:8px 0}
 
 @media(max-width:700px){
-	.mk-tabs{position:static;overflow-x:auto;flex-wrap:nowrap}
+	.mk-tabs{position:static;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none}
+	.mk-tabs::-webkit-scrollbar{display:none}
 	.mk-tab{flex:none;padding:9px 11px;font-size:13px}
 	.mk-urow{grid-template-columns:1fr auto;grid-template-areas:"name size" "bar bar"}
 	.mk-urow-name{grid-area:name}.mk-urow .mk-track{grid-area:bar}.mk-urow strong{grid-area:size}

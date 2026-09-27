@@ -68,3 +68,4 @@ Same device, plus a second USB disk formatted NTFS on Windows (media library tes
 | Remote | WireGuard end to end with the client in a network namespace: handshake; SMB (445) reachable; SSH (22), LuCI (80) and DLNA (8200) refused | Pass |
 | Remote | Turning remote access off removes the interface, peers and firewall rules | Pass |
 | UI | Tabs (Home, Users, Services, Disk, Remote access, Recovery trash), QR dialog, Light (sun) / Dark (moon) switch, Persian/English, phone width: no script errors, no horizontal scroll | Pass (UI preview) |
+| UI | Card and plan accent bars follow the rounded corners (automated corner check on every tab, light and dark); tab bar has no scrollbar line on phones | Pass (UI preview) |
