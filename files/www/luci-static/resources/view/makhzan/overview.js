@@ -507,7 +507,12 @@ return view.extend({
 					partitioning: t('پارتیشن‌بندی', 'partitioning'), formatting: t('فرمت', 'formatting'), configuring: t('پیکربندی', 'configuring'),
 					copying_overlay: t('کپی اطلاعات روتر روی USB (ممکن است چند دقیقه طول بکشد)', 'copying router data to USB (may take minutes)'), activating: t('فعال‌سازی', 'activating'),
 					unmounting: t('قطع موقت اشتراک‌ها و جدا کردن دیسک', 'pausing shares and unmounting the disk'), mounting: t('اتصال دوباره دیسک', 'mounting the disk again') };
+				var order = check ? [ 'unmounting', 'checking', 'mounting' ] : [ 'checking', 'partitioning', 'formatting', 'configuring', 'copying_overlay', 'activating' ];
+				var at = order.indexOf(job.step), pct = Math.round(((at < 0 ? 0 : at) + 0.5) * 100 / order.length);
 				box.appendChild(alertBox('mk-busy', 'refresh', (check ? t('بررسی دیسک در حال انجام است: ', 'Checking disk: ') : t('آماده‌سازی دیسک در حال انجام است: ', 'Preparing disk: ')) + (steps[job.step] || '…') + t(' — روتر را خاموش نکنید و USB را جدا نکنید.', ' — do not power off or unplug the USB.')));
+				box.appendChild(E('div', { 'class': 'mk-job-progress' }, [
+					E('div', { 'class': 'mk-track' }, E('i', { 'style': 'width:' + pct + '%;background:linear-gradient(90deg,#6366f1,#10b981)' })),
+					num(pct + '%') ]));
 			}
 			else if (job.state === 'failed')
 				box.appendChild(alertBox('error', 'alert', (check ? t('بررسی دیسک ناموفق بود: ', 'Disk check failed: ') : t('آماده‌سازی دیسک ناموفق بود: ', 'Disk preparation failed: ')) + msgOf(job.error)));
@@ -1500,24 +1505,26 @@ return view.extend({
 		var tick = function() {
 			if (!root.isConnected) { poll.remove(tick); return; }
 			ticks++;
-			if (activeTab === 'downloads') return loadDownloads();
-			if (data.job && data.job.state === 'running') {
-				/* Light job check every 3 s; full refresh once the job has finished. */
-				return call([ 'storage-job' ]).then(function(job) {
-					data.job = job;
-					showJob(job);
-					if (job.state !== 'running') return refresh();
-				}).catch(function() {});
-			}
-			if (ticks % 5 === 0) return refresh().then(function() {
+			var work = [];
+			/* A running disk job is followed on every tab: light check every 3 s, full refresh once it has finished. */
+			if (data.job && data.job.state === 'running') work.push(call([ 'storage-job' ]).then(function(job) {
+				data.job = job;
+				showJob(job);
+				if (job.state !== 'running') return refresh();
+			}).catch(function() {}));
+			if (activeTab === 'downloads') work.push(loadDownloads());
+			else if (!work.length && ticks % 5 === 0) work.push(refresh().then(function() {
 				if (activeTab === 'trash' || activeTab === 'disk' || (activeTab === 'remote' && remoteState && remoteState.enabled)) return loaders[activeTab]();
-			}).catch(function() {});
+			}).catch(function() {}));
+			return Promise.all(work);
 		};
 		poll.add(tick, 3);
-		/* LuCI may stop its poller (auto refresh paused, session prompt); the download queue stays live on its own timer. */
-		var liveTimer = window.setInterval(function() {
+		/* LuCI may stop its poller (auto refresh paused, session prompt); the page then runs the same refresh on its own timer. */
+		var liveBusy = false, liveTimer = window.setInterval(function() {
 			if (!root.isConnected) { window.clearInterval(liveTimer); return; }
-			if (activeTab === 'downloads' && !poll.active() && document.visibilityState === 'visible') loadDownloads();
+			if (liveBusy || poll.active() || document.visibilityState !== 'visible') return;
+			liveBusy = true;
+			Promise.resolve(tick()).catch(function() {}).finally(function() { liveBusy = false; });
 		}, 3000);
 		return root;
 	},

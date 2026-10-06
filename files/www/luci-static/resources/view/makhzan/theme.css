@@ -125,6 +125,9 @@
 .mk-role-limit:empty{display:none}
 .mk-dark .mk-role-limit{color:#fcd34d}
 /* Card action row: in RTL, flex-end is the bottom-left corner. */
+.mk-job-progress{display:flex;align-items:center;gap:12px;margin:-4px 0 12px}
+.mk-job-progress .mk-track{flex:1;margin:0}
+.mk-job-progress bdi{font-weight:700;min-width:3.5em;text-align:end}
 .mk-card-foot{display:flex;justify-content:flex-end;align-items:center;gap:12px;flex-wrap:wrap;margin-top:18px}
 .mk-slot-msg{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;border-radius:10px;padding:6px 10px;border:1px solid transparent}
 .mk-slot-msg:empty{display:none}

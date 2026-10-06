@@ -130,4 +130,5 @@ Builds on 2.0.0 (2.0.1 was published from an older local revision and is superse
 | Area | Test | Result |
 |---|---|---|
 | Downloads | Search button and Enter filter the queue by filename or link; no match shows "Nothing matches these filters"; button stays on the search line at 375 px | Pass (UI with recorded router data) |
-| Downloads | Queue refresh no longer depends on LuCI's poller: when it is stopped the queue reloads every 3 seconds on its own timer | Installed on the router; to be confirmed in a signed-in browser |
+| UI | With LuCI's poller stopped the page refreshes on its own 3-second timer: download queue keeps moving; a disk preparation followed from the Download tab goes partitioning 25% → formatting 42% → configuring 58% → "Disk prepared successfully" without a reload | Pass (UI with recorded router data) |
+| UI | Running disk job shows a progress bar with a percentage | Pass (UI with recorded router data) |
