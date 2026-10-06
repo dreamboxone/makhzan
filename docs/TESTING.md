@@ -87,3 +87,38 @@ Same Google WiFi device on OpenWrt 25.12.5. The package had already been removed
 | Removal | Isolated-container CI covers removal of all runtime files, config, managed account and group; saved fstab and disk-folder fixture retained; reinstall restores defaults and previous free GID | Automated regression in `.github/scripts/smoke-test.sh` |
 
 The live router was not repartitioned, and its recovery trash was not restored or emptied during this verification. SMB/DLNA settings remain off after the fresh installation, as expected after complete removal.
+
+## Version 2.0.0 (2026-10-06)
+
+Same Google WiFi device on OpenWrt 25.12.5, curl 8.22.0, 16 GB USB flash drive as NAS. Download tests use
+`scripts/test-download-router.py`, which serves a private HTTP fixture to the router over an SSH tunnel,
+uses only its own test jobs and restores the downloader settings afterwards.
+
+| Area | Test | Result |
+|---|---|---|
+| Downloads | Space check refuses a 100 TB file and a link without a size; repeated add with the same request token queues once; real transfer, SHA-256 of the saved file, rename, deletion | Pass |
+| Downloads | Pause mid-transfer, resume by byte range, elapsed time kept | Pass |
+| Downloads | Two concurrent files, speed and ETA, pause all / resume all, deletion during transfer | Pass |
+| Downloads | Connection dropped mid-file: automatic retry after the configured interval completes the file | Pass |
+| Downloads | HTTP Basic credentials passed through a one-time root-only token | Pass |
+| Downloads | Future Persian-date schedule survives a service restart; queued deletion | Pass |
+| Downloads | Total bandwidth limit removed (unlimited) | Pass |
+| Downloads | "Download" starts at once with the manager off, past a busy queue slot and outside download hours; 1-6 simultaneous files accepted, 7 refused | Pass |
+| Downloads | 8 MiB file in 4 range segments, paused and resumed; joined file hash matches the source; category detected | Pass |
+| Downloads | SHA-256 and MD5 verification; mismatch fails the job; invalid checksum refused | Pass |
+| Downloads | Duplicate link refused; reorder top/up/down/bottom; clear cancelled items | Pass |
+| Downloads | Custom Referer, User-Agent and Cookie sent; per-job config file is mode 0600 | Pass |
+| Downloads | Per-download speed limit (64 KB/s), new link for a paused job resumes by range, download again | Pass |
+| Downloads | Download hours: outside the window the job waits with 0 bytes, inside it runs; start now over a future schedule | Pass |
+| Downloads | Real 2 GiB file from a public mirror with "Download": 8 parallel range connections, about 2 MB/s, validator recorded for resume | Pass |
+| Disk planner | Current layout reported per disk (labels `makhzan-nas/swap/extroot`, size, in use); NAS tile on with its size after allocation | Pass |
+| Disk planner | Switch refuses a role when no space is left; typed sizes clamp to the remaining space; "Use all remaining" fills it exactly | Pass (UI with recorded router data) |
+| Storage | NAS recreated with `mkfs.ext4 -m 0`: free space 15.4 GB of 15.4 GB (14.6 GB with the default 5% reserve) | Pass |
+| UI | `calendar.js` loads as a LuCI class under a build-stamped name; every module the view requires is installed (smoke test) | Pass |
+| UI | All seven tabs at 375 px: no horizontal scroll, nothing outside the viewport, no clipped text, no small tap targets | Pass (UI with recorded router data) |
+| UI | Light theme gives native controls (number spinners, time pickers) light colors under a dark LuCI theme; dark theme dark | Pass (UI with recorded router data) |
+| UI | Disk job result shown once with a close button; gone after reload; results older than ten minutes not shown | Pass (UI with recorded router data) |
+| UI | "No disk detected" when no USB disk is plugged in, "Storage is not ready" when a disk is present but not prepared | Pass (UI with recorded router data) |
+
+"UI with recorded router data" means the real view rendered in a browser with its backend calls answered from
+JSON captured on the router, because the test browser was not signed in to LuCI.

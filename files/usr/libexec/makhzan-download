@@ -1,0 +1,690 @@
+#!/bin/sh
+# Makhzan - scheduled USB downloads for OpenWrt
+# Copyright (C) 2026 dreamboxone
+# SPDX-License-Identifier: GPL-3.0-only
+# Distributed under GNU GPL version 3, without warranty. See LICENSE.
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+umask 077
+. /usr/libexec/makhzan-usb.sh || exit 1
+. /usr/share/libubox/jshn.sh || exit 1
+RUN=/tmp/run/makhzan-download
+SELF=/usr/libexec/makhzan-download
+LOCK=/var/lock/makhzan-download.lock
+mkdir -p "$RUN"; chmod 0700 "$RUN"
+err() { json_init; json_add_boolean ok 0; json_add_string error "$1"; json_dump; exit 1; }
+ok() { printf '{"ok":true}\n'; }
+uint() { case "$1" in ''|*[!0-9]*|0[0-9]*) return 1;; esac; [ ${#1} -le 10 ]; }
+valid_id() { [ ${#1} -eq 32 ] && ! printf '%s' "$1" | grep -q '[^a-f0-9]'; }
+valid_url() {
+ [ ${#1} -le 4096 ] || return 1
+ case "$1" in http://?*|https://?*) ;; *) return 1;; esac
+ # Only HTTP(S), no credentials or whitespace. All arguments stay quoted, never evaluated.
+ ! printf '%s' "$1" | LC_ALL=C grep -q '[[:space:][:cntrl:]]' || return 1
+ authority=${1#*://}; authority=${authority%%/*}; authority=${authority%%\?*}; authority=${authority%%\#*}
+ case "$authority" in ''|*@*|*\\*) return 1;; esac
+}
+valid_checksum() {
+ case "${#1}" in 0|32|64) ;; *) return 1;; esac
+ ! printf '%s' "$1" | grep -q '[^a-f0-9]'
+}
+category() {
+ ext=$(printf '%s' "${1##*.}" | tr 'A-Z' 'a-z')
+ case "$1" in *.*) ;; *) echo other; return;; esac
+ case "$ext" in
+  mp4|mkv|avi|mov|wmv|flv|webm|m4v|ts|mpg|mpeg|3gp) echo video;;
+  mp3|flac|wav|aac|ogg|m4a|wma|opus) echo music;;
+  jpg|jpeg|png|gif|bmp|webp|svg|tif|tiff|heic) echo image;;
+  pdf|doc|docx|xls|xlsx|ppt|pptx|txt|epub|odt|csv|rtf) echo document;;
+  zip|rar|7z|tar|gz|bz2|xz|tgz|zst) echo archive;;
+  exe|msi|apk|ipk|deb|rpm|dmg|iso|img|bin|appimage) echo program;;
+  *) echo other;;
+ esac
+}
+valid_name() {
+ [ -n "$1" ] && [ ${#1} -le 120 ] || return 1
+ case "$1" in .*|*[/\\:*?\"\<\>\|]*|' '*|*' '|*.) return 1;; esac
+ ! printf '%s' "$1" | LC_ALL=C grep -q '[[:cntrl:]]'
+}
+clock_synced() { [ "$(cat /tmp/run/makhzan-clock-synced 2>/dev/null)" = "$(cat /proc/sys/kernel/random/boot_id)" ]; }
+uptime_s() { cut -d. -f1 /proc/uptime; }
+storage_busy() { [ -d /var/lock/makhzan-storage.lock ]; }
+# Hold a working-directory reference on the USB filesystem. Every download/metadata write is
+# relative to this directory, so even a lazy unmount cannot redirect writes into internal flash.
+open_store() {
+ NAS=$(uci -q get makhzan.main.root)
+ makhzan_usb_mount "$NAS" || return 1
+ cd "$NAS" || return 1
+ [ "$(df -P . | awk 'NR==2 {print $6}')" = "$NAS" ] || return 1
+ if [ ! -e .makhzan-downloads ]; then
+  [ "$1" = create ] || return 1
+  mkdir -m 0710 .makhzan-downloads || return 1
+  chown root:makhzan .makhzan-downloads || return 1
+ fi
+ [ ! -L .makhzan-downloads ] && [ "$(makhzan_owner_mode .makhzan-downloads)" = 'drwx--x--- 0' ] || return 1
+ cd .makhzan-downloads || return 1
+ for d in jobs completed; do
+  if [ ! -e "$d" ] && [ "$1" = create ]; then
+   mkdir -m 0700 "$d" || return 1
+   [ "$d" != completed ] || { chown root:makhzan "$d" && chmod 0750 "$d"; } || return 1
+  fi
+  [ -d "$d" ] && [ ! -L "$d" ] || return 1
+  case "$(makhzan_owner_mode "$d")" in 'drwx------ 0'|'drwxr-x--- 0') ;; *) return 1;; esac
+ done
+ makhzan_usb_mount "$NAS" && [ "$(df -P . | awk 'NR==2 {print $6}')" = "$NAS" ]
+}
+acquire() { lock "$LOCK" || exit 1; HAVE_LOCK=1; }
+unlock() { lock -u "$LOCK"; HAVE_LOCK=0; }
+read_job() {
+ valid_id "$1" && [ -d "jobs/$1" ] && [ ! -L "jobs/$1" ] && [ ! -L "jobs/$1/meta.json" ] || return 1
+ json_load "$(cat "jobs/$1/meta.json" 2>/dev/null)" || return 1
+ json_get_vars id url name start power state attempts retry error expected order elapsed rename_to segments rate checksum immediate
+ expected=${expected:-0}
+ order=${order:-0}
+ elapsed=${elapsed:-0}; rename_to=${rename_to:-}; segments=${segments:-1}; rate=${rate:-0}; checksum=${checksum:-}; immediate=${immediate:-0}
+ uint "$segments" && [ "$segments" -ge 1 ] && [ "$segments" -le 8 ] && uint "$rate" && [ "$rate" -le 65536 ] || return 1
+ valid_checksum "$checksum" || return 1
+ case "$immediate" in 0|1) ;; *) return 1;; esac
+ [ "$id" = "$1" ] && valid_url "$url" && valid_name "$name" && uint "$start" && uint "$attempts" && uint "$retry" || return 1
+ case "$expected" in ''|*[!0-9]*) return 1;; esac
+ case "$power" in 0|1) ;; *) return 1;; esac
+ case "$state" in queued|downloading|paused|failed|completed|cancelled|finalizing|deleting|renaming) ;; *) return 1;; esac
+}
+save_job() {
+ json_init
+ json_add_string id "$id"; json_add_string url "$url"; json_add_string name "$name"
+ json_add_int start "$start"; json_add_int power "$power"; json_add_string state "$state"
+ json_add_int attempts "$attempts"; json_add_int retry "$retry"; json_add_string error "$error"
+ json_add_int expected "$expected"
+ json_add_int order "$order"
+ json_add_int elapsed "$elapsed"; json_add_string rename_to "$rename_to"
+ json_add_int segments "$segments"; json_add_int rate "$rate"; json_add_string checksum "$checksum"; json_add_int immediate "$immediate"
+ json_dump > "jobs/$id/meta.tmp" && mv -f "jobs/$id/meta.tmp" "jobs/$id/meta.json"
+}
+worker_alive() {
+ for worker_file in "$RUN"/worker.${1:-*}; do
+  worker_pid=$(cat "$worker_file" 2>/dev/null)
+  if uint "$worker_pid" && kill -0 "$worker_pid" 2>/dev/null &&
+   tr '\000' ' ' < "/proc/$worker_pid/cmdline" 2>/dev/null | grep -q "/usr/libexec/makhzan-download worker ${worker_file##*.}"; then return 0; fi
+ done
+ return 1
+}
+active_count() { n=0; for f in "$RUN"/worker.*; do worker_alive "${f##*.}" && n=$((n+1)); done; echo "$n"; }
+parallel() { p=$(uci -q get makhzan.main.download_parallel); case "$p" in 2|3|4|5|6) echo "$p";; *) echo 1;; esac; }
+# Connections across all transfers are capped so a small router keeps memory and CPU to spare.
+MAX_CONNECTIONS=16
+MAX_WORKERS=8
+enabled() { [ "$(uci -q get makhzan.main.download_enabled)" = 1 ]; }
+# Total limit in KB/s; 0 means no limit. An unset or invalid value falls back to 8192.
+bandwidth() { p=$(uci -q get makhzan.main.download_limit); if [ "$p" = 0 ] || { uint "$p" && [ "$p" -le 65536 ]; }; then echo "$p"; else echo 8192; fi; }
+segments_default() { p=$(uci -q get makhzan.main.download_segments); case "$p" in 1|2|3|4|5|6|7|8) echo "$p";; *) echo 8;; esac; }
+job_bytes() { ls -ln "jobs/$1/payload.part" "jobs/$1"/seg.* 2>/dev/null | awk '{s+=$5} END {print s+0}'; }
+# Download window: minutes after midnight, router time. Disabled unless download_window=1.
+window_enabled() { [ "$(uci -q get makhzan.main.download_window)" = 1 ]; }
+window_start() { p=$(uci -q get makhzan.main.download_window_start); if uint "$p" && [ "$p" -le 1439 ]; then echo "$p"; else echo 60; fi; }
+window_end() { p=$(uci -q get makhzan.main.download_window_end); if uint "$p" && [ "$p" -le 1439 ]; then echo "$p"; else echo 420; fi; }
+minutes_now() { set -- $(date +'%H %M'); echo $(( ${1#0} * 60 + ${2#0} )); }
+in_window() {
+ window_enabled || return 0
+ clock_synced || return 0
+ m=$(minutes_now); a=$(window_start); b=$(window_end)
+ if [ "$a" -le "$b" ]; then [ "$m" -ge "$a" ] && [ "$m" -lt "$b" ]; else [ "$m" -ge "$a" ] || [ "$m" -lt "$b" ]; fi
+}
+retry_enabled() { [ "$(uci -q get makhzan.main.download_retry_enabled)" != 0 ]; }
+retry_interval() { p=$(uci -q get makhzan.main.download_retry_interval); if uint "$p" && [ "$p" -ge 1 ] && [ "$p" -le 3600 ]; then echo "$p"; else echo 60; fi; }
+retry_job() {
+ attempts=$((attempts + 1)); state=failed; error="Download failed (curl code $1)"
+ case "$1" in 5|6|7|18|28|33|52|55|56|63)
+  if retry_enabled && [ "$attempts" -lt 5 ]; then state=queued; retry=$(( $(date +%s) + $(retry_interval) )); fi;;
+ esac
+}
+stop_workers() { for f in "$RUN"/worker.*; do worker_alive "${f##*.}" && kill "$(cat "$f")" 2>/dev/null; done; rm -f "$RUN/shutdown" "$RUN/power-request"; }
+conf_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+auth_config() {
+ : > "$2" || return 1
+ [ -n "$1" ] || return 0
+ valid_id "$1" || return 1
+ secret="/tmp/run/makhzan/secret.$1"
+ [ -f "$secret" ] && [ ! -L "$secret" ] && [ "$(makhzan_owner_mode "$secret")" = '-rw------- 0' ] || return 1
+ auth_json=$(cat "$secret"); rm -f "$secret"
+ json_load "$auth_json" || return 1
+ json_get_var auth_user username; json_get_var auth_pass password
+ json_get_var auth_referer referer; json_get_var auth_agent agent; json_get_var auth_cookie cookie
+ [ ${#auth_user} -le 128 ] && [ ${#auth_pass} -le 512 ] && [ ${#auth_referer} -le 2048 ] && [ ${#auth_agent} -le 256 ] && [ ${#auth_cookie} -le 4096 ] || return 1
+ case "$auth_user" in *:*) return 1;; esac
+ [ -n "$auth_user" ] || [ -z "$auth_pass" ] || return 1
+ ! printf '%s%s%s%s%s' "$auth_user" "$auth_pass" "$auth_referer" "$auth_agent" "$auth_cookie" | LC_ALL=C grep -q '[[:cntrl:]]' || return 1
+ if [ -n "$auth_user" ]; then printf 'user = "%s"\nanyauth\n' "$(conf_escape "$auth_user:$auth_pass")" >> "$2"; fi
+ [ -z "$auth_referer" ] || printf 'referer = "%s"\n' "$(conf_escape "$auth_referer")" >> "$2"
+ [ -z "$auth_agent" ] || printf 'user-agent = "%s"\n' "$(conf_escape "$auth_agent")" >> "$2"
+ [ -z "$auth_cookie" ] || printf 'header = "Cookie: %s"\n' "$(conf_escape "$auth_cookie")" >> "$2"
+ unset auth_json auth_user auth_pass auth_referer auth_agent auth_cookie
+}
+clock_status() {
+ zone=$(uci -q get system.@system[0].zonename)
+ tz=$(uci -q get system.@system[0].timezone)
+ tehran=0; [ "$zone" != Asia/Tehran ] || { case "$tz" in '<+0330>-3:30'|'IRST-3:30') tehran=1;; esac; }
+ synced=0; clock_synced && synced=1
+ json_init; json_add_boolean ok 1; json_add_string zone "$zone"; json_add_boolean tehran "$tehran"
+ json_add_boolean synced "$synced"; json_add_int now "$(date +%s)"; json_dump
+}
+set_tehran() {
+ if [ "$(uci -q get system.@system[0].zonename)" = Asia/Tehran ] && [ "$(uci -q get system.@system[0].timezone)" = '<+0330>-3:30' ]; then clock_status; return; fi
+ uci set system.@system[0].zonename=Asia/Tehran && uci set 'system.@system[0].timezone=<+0330>-3:30' && uci commit system || err 'Clock settings could not be saved'
+ /etc/init.d/system reload >/dev/null 2>&1
+ clock_status
+}
+# Read only response headers. Unknown lengths cannot pass the space check. Range probing
+# is bounded to one byte even when a server ignores the Range request. Prints "<size> <ranges>"
+# and optionally writes the ETag or Last-Modified validator to the file named by $3.
+probe_size() {
+ probe_file="$RUN/probe.$$"
+ probe_ranges=0
+ curl -q --silent --fail --head --location --globoff --max-redirs 5 --proto '=http,https' --proto-redir '=http,https' \
+  --connect-timeout 5 --max-time 8 --config "$2" --dump-header "$probe_file" --output /dev/null --url "$1" >/dev/null 2>&1
+ probe_rc=$?
+ probe_size=$(awk 'BEGIN {n=""} /^HTTP\// {n=""} tolower($1)=="content-length:" {gsub("\r", "", $2); n=$2} END {print n}' "$probe_file" 2>/dev/null)
+ [ "$probe_rc" = 0 ] || probe_size=''
+ if [ -n "$probe_size" ] && [ "$(awk 'BEGIN {r=0} /^HTTP\// {r=0} tolower($1)=="accept-ranges:" && tolower($2) ~ /^bytes/ {r=1} END {print r}' "$probe_file" 2>/dev/null)" = 1 ]; then probe_ranges=1; fi
+ case "$probe_size" in ''|*[!0-9]*)
+  curl -q --silent --fail --location --globoff --max-redirs 5 --proto '=http,https' --proto-redir '=http,https' \
+   --connect-timeout 5 --max-time 8 --config "$2" --range 0-0 --max-filesize 1 --dump-header "$probe_file" --output /dev/null --url "$1" >/dev/null 2>&1
+  probe_rc=$?
+  probe_size=$(awk 'BEGIN {n=""} /^HTTP\// {n=""} tolower($1)=="content-range:" {split($3,a,"/"); gsub("\r", "", a[2]); n=a[2]} END {print n}' "$probe_file" 2>/dev/null)
+  probe_ranges=1;;
+ esac
+ [ -z "$3" ] || awk '/^HTTP\// {e=""; l=""} tolower($1)=="etag:" {$1=""; sub(/^ /,""); gsub("\r",""); e=$0} tolower($1)=="last-modified:" {$1=""; sub(/^ /,""); gsub("\r",""); l=$0} END {if (e != "" && e !~ /^W\//) print e; else print l}' "$probe_file" > "$3" 2>/dev/null
+ rm -f "$probe_file"
+ case "$probe_size" in ''|*[!0-9]*) [ "$probe_rc" != 0 ] && return "$probe_rc"; return 99;; esac
+ [ ${#probe_size} -le 15 ] || return 1
+ printf '%s %s\n' "$probe_size" "$probe_ranges"
+}
+duplicate_link() (
+ for item in jobs/*; do
+  read_job "${item#jobs/}" || continue
+  case "$state" in queued|downloading|paused) [ "$url" != "$1" ] || return 0;; esac
+ done
+ return 1
+)
+reserved_bytes() (
+ sum=0
+ for item in jobs/*; do
+  read_job "${item#jobs/}" || continue
+  [ "$id" != "$1" ] || continue
+  case "$state" in queued|downloading|paused|finalizing)
+   size=$(job_bytes "$id"); remain=$((expected - ${size:-0}))
+   [ "$remain" -le 0 ] || sum=$((sum + remain));;
+  esac
+ done
+ echo "$sum"
+)
+space_available() {
+ free_kib=$(df -Pk . | awk 'NR==2 {print $4}')
+ reserved=$(reserved_bytes "$1")
+ partial=$(job_bytes "$1")
+ needed=$(($2 - ${partial:-0})); [ "$needed" -ge 0 ] || needed=$2
+ # Segmented files are joined at the end; keep room for the largest segment to exist twice.
+ [ "${3:-1}" -le 1 ] || needed=$((needed + $2 / $3 + 1))
+ [ "$(( ${free_kib:-0} * 1024 - reserved - 67108864 ))" -ge "$needed" ]
+}
+add() {
+ token=$1; url=$2; name=$3; start=$4; power=$5
+ segments=${7:-}; rate=${8:-0}; immediate=${10:-0}; checksum=$(printf '%s' "${9:-}" | tr 'A-F' 'a-f')
+ [ -n "$segments" ] || segments=$(segments_default)
+ case "$immediate" in 0|1) ;; *) err 'Invalid download option';; esac
+ [ "$immediate" = 0 ] || start=0
+ case "$segments" in 1|2|3|4|5|6|7|8) ;; *) err 'Segments must be between 1 and 8';; esac
+ uint "$rate" && [ "$rate" -le 65536 ] || err 'Speed limit must be between 0 and 65536 KB/s'
+ valid_checksum "$checksum" || err 'Checksum must be 32 (MD5) or 64 (SHA-256) hexadecimal characters'
+ valid_id "$token" || err 'Invalid request identifier'
+ valid_url "$url" || err 'Use a direct HTTP or HTTPS link without embedded credentials'
+ valid_name "$name" || err 'Invalid download filename'
+ uint "$start" && [ "$start" -le 2145916799 ] || err 'Invalid download date'
+ [ "$start" = 0 ] || [ "$start" -gt "$(date +%s)" ] || err 'Choose a future date and time'
+ case "$power" in 0|1) ;; *) err 'Invalid shutdown option';; esac
+ command -v curl >/dev/null || err 'The curl package is not installed'
+ auth_tmp="$RUN/auth.$token"
+ trap 'rm -f "$auth_tmp"' EXIT
+ auth_config "$6" "$auth_tmp" || err 'Invalid download credentials'
+ open_store create || err 'USB storage is not ready or its download directory is unsafe'
+ acquire
+ storage_busy && { unlock; err 'A disk operation is running'; }
+ # A repeated RPC with the same token cannot create or restart a second download.
+ if [ -f "jobs/$token/meta.json" ]; then unlock; ok; return; fi
+ ! duplicate_link "$url" || { unlock; err 'This link is already in the download list'; }
+ probe=$(probe_size "$url" "$auth_tmp") || { unlock; err 'The server did not report the file size; free space cannot be verified'; }
+ expected=${probe%% *}; ranges=${probe#* }
+ [ "$ranges" = 1 ] || segments=1
+ space_available "$token" "$expected" "$segments" || { unlock; err 'Not enough free USB space for this download and the queued files'; }
+ count=$(find jobs -mindepth 1 -maxdepth 1 -type d | wc -l)
+ [ "$count" -lt 100 ] || { unlock; err 'Download history is full (100 items); remove old entries'; }
+ id=$token; state=queued; attempts=0; retry=0; error=''; elapsed=0; rename_to=''
+ order=$(cat sequence 2>/dev/null); uint "$order" || order=0
+ order=$((order + 1)); echo "$order" > sequence
+ mkdir -p -m 0700 "jobs/$id" && cp "$auth_tmp" "jobs/$id/auth.conf" && save_job || { unlock; err 'Could not save download on USB'; }
+ sync
+ rm -f "$RUN/shutdown" "$RUN/power-request"
+ [ "$immediate" = 0 ] || touch "$RUN/immediate"
+ unlock; ok
+}
+delete_job() {
+ # Both locations are descendants of the pinned, root-writable USB directory.
+ rm -f "completed/$id-$name" "jobs/$id/payload.part" "jobs/$id"/seg.* "jobs/$id/segstate" "jobs/$id/validator.new" "jobs/$id/headers" "jobs/$id/headers.old" "jobs/$id/meta.json" "jobs/$id/meta.tmp" "jobs/$id/auth.conf"
+ rmdir "jobs/$id"
+}
+finish_rename() {
+ valid_name "$rename_to" || return 1
+ if [ -f "completed/$id-$name" ]; then
+  [ ! -e "completed/$id-$rename_to" ] && mv "completed/$id-$name" "completed/$id-$rename_to" || return 1
+ fi
+ [ -f "completed/$id-$rename_to" ] || return 1
+ name=$rename_to; rename_to=''; state=completed; save_job
+}
+action() {
+ op=$1; target=$2; newname=$3
+ valid_id "$target" || err 'Invalid download identifier'
+ open_store || err 'USB storage is not ready or its download directory is unsafe'
+ acquire
+ read_job "$target" || { unlock; err 'Download not found'; }
+ case "$op" in
+  pause) case "$state" in queued|downloading) state=paused; immediate=0;; *) unlock; err 'This download cannot be paused';; esac;;
+  resume) case "$state" in paused|failed) state=queued; attempts=0; retry=0; error='';; *) unlock; err 'This download cannot be resumed';; esac;;
+  cancel) case "$state" in completed|finalizing) unlock; err 'A completed download cannot be cancelled';; esac; state=cancelled;;
+  remove)
+   state=deleting; save_job || { unlock; err 'Could not save download on USB'; }
+   if ! worker_alive "$id"; then delete_job || { unlock; err 'Could not remove download entry'; }; fi
+   rm -f "$RUN/shutdown" "$RUN/power-request"; unlock; ok; return;;
+  rename)
+   [ "$state" = completed ] && valid_name "$newname" || { unlock; err 'Only a completed file can be renamed; choose a valid filename'; }
+   [ "$name" != "$newname" ] || { unlock; ok; return; }
+   state=renaming; rename_to=$newname
+   save_job && finish_rename || { unlock; err 'Could not rename downloaded file'; }
+   unlock; ok; return;;
+  relink)
+   case "$state" in paused|failed) ;; *) unlock; err 'Only a paused or failed download can get a new link';; esac
+   valid_url "$newname" || { unlock; err 'Use a direct HTTP or HTTPS link without embedded credentials'; }
+   url=$newname; error='';;
+  rate)
+   case "$state" in completed|cancelled|deleting|renaming|finalizing) unlock; err 'This download cannot be changed';; esac
+   uint "$newname" && [ "$newname" -le 65536 ] || { unlock; err 'Speed limit must be between 0 and 65536 KB/s'; }
+   rate=$newname;;
+  start-now)
+   case "$state" in queued|paused|failed) ;; *) unlock; err 'This download cannot be started now';; esac
+   state=queued; start=0; retry=0; attempts=0; error=''; immediate=1;;
+  redownload)
+   case "$state" in completed|cancelled|failed) ;; *) unlock; err 'This download cannot be downloaded again';; esac
+   worker_alive "$id" && { unlock; err 'Wait for the transfer to stop'; }
+   rm -f "completed/$id-$name" "jobs/$id/payload.part" "jobs/$id"/seg.* "jobs/$id/segstate" "jobs/$id/validator.new" "jobs/$id/headers" "jobs/$id/headers.old"
+   state=queued; start=0; retry=0; attempts=0; error=''; elapsed=0;;
+  *) unlock; err 'Unknown download action';;
+ esac
+ save_job || { unlock; err 'Could not save download on USB'; }
+ rm -f "$RUN/shutdown" "$RUN/power-request"
+ [ "$immediate" = 0 ] || touch "$RUN/immediate"
+ unlock; ok
+}
+# Move a waiting download earlier or later. Orders of the affected items are exchanged, so
+# every other item keeps its place.
+move() {
+ target=$1; direction=$2
+ valid_id "$target" || err 'Invalid download identifier'
+ case "$direction" in up|down|top|bottom) ;; *) err 'Unknown download action';; esac
+ open_store || err 'USB storage is not ready or its download directory is unsafe'
+ acquire
+ rows=''
+ for item in jobs/*; do
+  read_job "${item#jobs/}" || continue
+  case "$state" in completed|cancelled|deleting|renaming) continue;; esac
+  rows="$rows$order $id
+"
+ done
+ sorted=$(printf '%s' "$rows" | sort -n)
+ orders=$(printf '%s\n' "$sorted" | awk 'NF {print $1}')
+ ids=$(printf '%s\n' "$sorted" | awk 'NF {print $2}')
+ printf '%s\n' "$ids" | grep -qx "$target" || { unlock; err 'Download not found'; }
+ neworder=$(printf '%s\n' "$ids" | awk -v t="$target" -v d="$direction" '
+  NF {a[++n]=$1; if ($1==t) p=n}
+  END {
+   if (d=="top") {out[1]=t; k=1; for (i=1;i<=n;i++) if (i!=p) out[++k]=a[i]}
+   else if (d=="bottom") {k=0; for (i=1;i<=n;i++) if (i!=p) out[++k]=a[i]; out[++k]=t}
+   else {for (i=1;i<=n;i++) out[i]=a[i]; q=(d=="up")?p-1:p+1; if (q>=1 && q<=n) {out[p]=a[q]; out[q]=t}}
+   for (i=1;i<=n;i++) print out[i]
+  }')
+ pairs=$(awk -v O="$orders" -v W="$neworder" 'BEGIN {n=split(O, o, "\n"); split(W, w, "\n"); for (i=1; i<=n; i++) print o[i], w[i]}')
+ printf '%s\n' "$pairs" | while read -r new_order moved_id; do
+  [ -n "$moved_id" ] || continue
+  read_job "$moved_id" || continue
+  order=$new_order; save_job
+ done
+ unlock; ok
+}
+all_action() {
+ open_store || err 'USB storage is not ready or its download directory is unsafe'
+ acquire
+ for item in jobs/*; do
+  read_job "${item#jobs/}" || continue
+  case "$1:$state" in
+   pause-all:queued|pause-all:downloading) state=paused; save_job;;
+   resume-all:paused) state=queued; retry=0; error=''; save_job;;
+   clear-finished:failed|clear-finished:cancelled) worker_alive "$id" || { state=deleting; save_job; delete_job; };;
+  esac
+ done
+ rm -f "$RUN/shutdown" "$RUN/power-request"; unlock; ok
+}
+list() {
+ clock=$(clock_status)
+ ready=0; open_store && ready=1
+ available=0; command -v curl >/dev/null && available=1
+ active=0; worker_alive && active=1
+ deadline=$(cat "$RUN/shutdown" 2>/dev/null); left=0
+ if uint "$deadline"; then left=$((deadline - $(uptime_s))); [ "$left" -gt 0 ] || left=1; fi
+ # Save each object before opening the response builder: jshn has one global namespace.
+ items=''
+ if [ "$ready" = 1 ]; then
+  for item in jobs/*; do
+   read_job "${item#jobs/}" || continue
+   size=$(job_bytes "$id")
+   [ "$state" != completed ] || size=$(ls -ln "completed/$id-$name" 2>/dev/null | awk '{print $5}')
+   size=${size:-0}
+   json_init; json_add_string id "$id"; json_add_string name "$name"; json_add_string state "$state"
+   json_add_int start "$start"; json_add_boolean power "$power"; json_add_int bytes "$size"
+   json_add_int expected "$expected"
+   json_add_int order "$order"
+   json_add_string url "$url"; json_add_string category "$(category "$name")"
+   json_add_int segments "$segments"; json_add_int rate "$rate"; json_add_string checksum "$checksum"; json_add_boolean immediate "$immediate"
+   json_add_string phase "$(cat "$RUN/phase.$id" 2>/dev/null)"
+   speed=0; eta=0
+   if worker_alive "$id" && [ "$state" = downloading ]; then
+    set -- $(cat "$RUN/progress.$id" 2>/dev/null)
+    case "$1:$2" in *[!0-9:]*|:*) ;; *) speed=${1:-0}; elapsed=${2:-$elapsed};; esac
+    [ "$speed" -le 0 ] || eta=$(( (expected - size + speed - 1) / speed ))
+    [ "$eta" -ge 0 ] || eta=0
+   fi
+   json_add_int speed "$speed"; json_add_int elapsed "$elapsed"; json_add_int eta "$eta"
+   json_add_string error "$error"; json_add_int attempts "$attempts"
+   json_add_int retry_at "$retry"
+   [ "$state" != completed ] || json_add_string file "Downloads/$id-$name"
+   row=$(json_dump); items="$items${items:+,}$row"
+  done
+ fi
+ on=0; enabled && on=1
+ redial=0; retry_enabled && redial=1
+ win=0; window_enabled && win=1
+ inwin=0; in_window && inwin=1
+ printf '{"ok":true,"ready":%s,"installed":%s,"active":%s,"enabled":%s,"limit":%s,"parallel":%s,"redial":%s,"retry_interval":%s,"shutdown_seconds":%s,"segments":%s,"window":%s,"window_start":%s,"window_end":%s,"in_window":%s,"clock":%s,"jobs":[%s]}
+' "$ready" "$available" "$active" "$on" "$(bandwidth)" "$(parallel)" "$redial" "$(retry_interval)" "$left" "$(segments_default)" "$win" "$(window_start)" "$(window_end)" "$inwin" "$clock" "$items"
+}
+all_done() {
+ found=0
+ for item in jobs/*; do
+  read_job "${item#jobs/}" || continue
+  case "$state" in completed|cancelled) ;; *) return 1;; esac
+  found=1
+ done
+ [ "$found" = 1 ]
+}
+any_alive() { for child_pid in $children; do kill -0 "$child_pid" 2>/dev/null && return 0; done; return 1; }
+kill_children() { for child_pid in $children; do kill "$child_pid" 2>/dev/null; done; }
+cleanup_worker() {
+ kill_children
+ for child_pid in $children; do wait "$child_pid" 2>/dev/null; done
+ [ "$HAVE_LOCK" != 1 ] || unlock
+ if [ -n "$transfer_start" ]; then
+  acquire
+  if read_job "$own_id"; then elapsed=$((base_elapsed + $(uptime_s) - transfer_start)); save_job; fi
+  unlock
+ fi
+ rm -f "$RUN/worker.$own_id" "$RUN/progress.$own_id" "$RUN/progress.$own_id.tmp" "$RUN/phase.$own_id"
+}
+# Join finished segments into payload.part. Each segment is removed only after it was appended;
+# an interrupted join is repeated from the first remaining segment, so no byte is duplicated.
+assemble() {
+ echo assembling > "$RUN/phase.$own_id"
+ i=0
+ while [ "$i" -lt "$segN" ]; do
+  if [ -f "jobs/$id/seg.$i" ]; then
+   seg_start=$((i * segsize))
+   [ -f "jobs/$id/payload.part" ] || : > "jobs/$id/payload.part"
+   current=$(ls -ln "jobs/$id/payload.part" | awk '{print $5}')
+   [ "$current" -ge "$seg_start" ] || return 1
+   dd if=/dev/null of="jobs/$id/payload.part" bs=1 seek="$seg_start" 2>/dev/null
+   cat "jobs/$id/seg.$i" >> "jobs/$id/payload.part" && rm -f "jobs/$id/seg.$i" || return 1
+  fi
+  i=$((i + 1))
+ done
+ rm -f "jobs/$id/segstate" "$RUN/phase.$own_id"
+}
+verify_checksum() {
+ [ -n "$checksum" ] || return 0
+ echo verifying > "$RUN/phase.$own_id"
+ case ${#checksum} in 32) actual=$(md5sum "jobs/$id/payload.part" | awk '{print $1}');; *) actual=$(sha256sum "jobs/$id/payload.part" | awk '{print $1}');; esac
+ rm -f "$RUN/phase.$own_id"
+ [ "$actual" = "$checksum" ]
+}
+worker() {
+ open_store || exit 1
+ acquire
+ read_job "$1" && [ "$state" = queued ] && ! storage_busy && ! worker_alive "$1" || { unlock; exit 1; }
+ if [ "$immediate" = 1 ]; then [ "$(active_count)" -lt "$MAX_WORKERS" ] || { unlock; exit 1; }
+ else enabled && in_window && [ "$(active_count)" -lt "$(parallel)" ] || { unlock; exit 1; }; fi
+ state=downloading; error=''; save_job || { unlock; exit 1; }
+ own_id=$id
+ echo $$ > "$RUN/worker.$own_id"
+ unlock
+ children=''; transfer_start=''
+ trap cleanup_worker EXIT
+ trap 'exit 1' TERM INT HUP
+ target=$id
+ # Private directories never allow network users to replace payloads with symlinks.
+ [ ! -L "jobs/$id/payload.part" ] || exit 1
+ probe=$(probe_size "$url" "jobs/$id/auth.conf" "jobs/$id/validator.new") || {
+  probe_error=$?
+  acquire; read_job "$target"; retry_job "$probe_error"
+  [ "$probe_error" != 99 ] || error='The server did not report the file size; free space cannot be verified'
+  save_job; unlock; exit 1
+ }
+ expected=${probe%% *}; ranges=${probe#* }
+ # Resumed jobs keep the mode they started in. New segmented jobs need Range support and at
+ # least 1 MiB per segment.
+ segN=1
+ if ls "jobs/$id"/seg.* >/dev/null 2>&1; then
+  segN=$(awk '{print $1}' "jobs/$id/segstate" 2>/dev/null); uint "$segN" || segN=1
+ elif [ ! -s "jobs/$id/payload.part" ] && [ "$ranges" = 1 ] && [ "$segments" -gt 1 ]; then
+  segN=$((expected / 1048576)); [ "$segN" -le "$segments" ] || segN=$segments
+  cap=$((MAX_CONNECTIONS / $(parallel))); [ "$segN" -le "$cap" ] || segN=$cap
+ fi
+ [ "$segN" -ge 2 ] || segN=1
+ acquire
+ latest_size=$expected; read_job "$target"; expected=$latest_size
+ [ "$state" = downloading ] || { unlock; return; }
+ if ! space_available "$id" "$expected" "$segN"; then state=failed; error='Not enough free USB space for this download and the queued files'; save_job; unlock; exit 1; fi
+ save_job; unlock
+ free=$(df -Pk . | awk 'NR==2 {print $4}')
+ if [ "${free:-0}" -lt 65536 ]; then
+  acquire; read_job "$target"; state=failed; error='Not enough free USB space (64 MB reserve required)'; save_job; unlock; exit 1
+ fi
+ redirect='=http,https'; case "$url" in https:*) redirect='=https';; esac
+ # A job limit is the total for this download; otherwise the global limit is shared by the queue.
+ # rate_kb 0 means unlimited: curl treats --limit-rate 0 as no limit.
+ total_kb=$(bandwidth)
+ if [ "$rate" -gt 0 ]; then rate_kb=$rate
+ elif [ "$total_kb" = 0 ]; then rate_kb=0
+ else rate_kb=$(( total_kb / $(parallel) )); [ "$rate_kb" -ge 1 ] || rate_kb=1; fi
+ base_elapsed=$elapsed; transfer_start=$(uptime_s)
+ previous_size=$(job_bytes "$id"); previous_time=$transfer_start
+ rc=0; reason=''
+ if [ "$segN" -ge 2 ]; then
+  segsize=$(( (expected + segN - 1) / segN ))
+  # Segments are only valid for the exact object they were started from.
+  valid=$(cat "jobs/$id/validator.new" 2>/dev/null)
+  want="$segN $expected $valid"
+  if ls "jobs/$id"/seg.* >/dev/null 2>&1 && { [ -z "$valid" ] || [ "$(cat "jobs/$id/segstate" 2>/dev/null)" != "$want" ]; }; then
+   rm -f "jobs/$id"/seg.* "jobs/$id/payload.part"
+  fi
+  printf '%s\n' "$want" > "jobs/$id/segstate"
+  i=0
+  while [ "$i" -lt "$segN" ]; do
+   seg_from=$((i * segsize)); seg_to=$((seg_from + segsize - 1)); [ "$seg_to" -lt "$expected" ] || seg_to=$((expected - 1))
+   seg_len=$((seg_to - seg_from + 1))
+   have=$(ls -ln "jobs/$id/seg.$i" 2>/dev/null | awk '{print $5}'); have=${have:-0}
+   if [ "$have" -gt "$seg_len" ]; then : > "jobs/$id/seg.$i"; have=0; fi
+   if [ "$have" -lt "$seg_len" ] && [ ! -f "jobs/$id/payload.part" ]; then
+    curl -q --silent --fail --globoff --max-redirs 5 --proto '=http,https' --proto-redir "$redirect" \
+     --connect-timeout 20 --speed-limit 1 --speed-time 60 --limit-rate "$(( rate_kb * 1024 / segN ))" --config "jobs/$id/auth.conf" \
+     --max-filesize "$((seg_len - have))" --range "$((seg_from + have))-$seg_to" --location --output - --url "$url" >> "jobs/$id/seg.$i" 2>/dev/null &
+    children="$children $!"
+   fi
+   i=$((i + 1))
+  done
+ elif [ -s "jobs/$id/payload.part" ] && [ "$(ls -ln "jobs/$id/payload.part" | awk '{print $5}')" = "$expected" ]; then
+  : # A previous run finished the transfer but was interrupted before verification.
+ else
+  [ ! -f "jobs/$id/headers" ] || mv -f "jobs/$id/headers" "jobs/$id/headers.old"
+  # Use If-Range on resumed transfers so a changed upstream object is never appended to old data.
+  validator=$(sed -n 's/^[Ee][Tt][Aa][Gg]:[[:space:]]*//p' "jobs/$id/headers.old" 2>/dev/null | tail -1 | tr -d '\r')
+  case "$validator" in W/*|'') validator=$(sed -n 's/^[Ll]ast-[Mm]odified:[[:space:]]*//p' "jobs/$id/headers.old" 2>/dev/null | tail -1 | tr -d '\r');; esac
+  set --
+  if [ -s "jobs/$id/payload.part" ]; then
+   if [ -z "$validator" ]; then
+    # A server without a validator cannot safely support a persisted partial download.
+    : > "jobs/$id/payload.part"
+   else set -- --header "If-Range: $validator"; fi
+  fi
+  curl -q --silent --fail --location --globoff --max-redirs 5 --proto '=http,https' --proto-redir "$redirect" \
+   --connect-timeout 20 --speed-limit 1 --speed-time 60 --limit-rate "$(( rate_kb * 1024 ))" --config "jobs/$id/auth.conf" \
+   --max-filesize "$(( (${free:-65536} - 32768) * 1024 ))" --continue-at - \
+   --dump-header "jobs/$id/headers" --output "jobs/$id/payload.part" "$@" --url "$url" >/dev/null 2>&1 &
+  children=$!
+ fi
+ while any_alive; do
+  sleep 1
+  read_job "$target" || { reason='Download metadata is unavailable'; break; }
+  [ "$state" = downloading ] || { reason=stopped; break; }
+  [ "$immediate" = 1 ] || in_window || { reason=window; break; }
+  sample_time=$(uptime_s); sample_size=$(job_bytes "$id")
+  delta=$((sample_time - previous_time)); speed=0
+  [ "$delta" -le 0 ] || speed=$(( (sample_size - previous_size) / delta ))
+  [ "$speed" -ge 0 ] || speed=0
+  printf '%s %s\n' "$speed" "$((base_elapsed + sample_time - transfer_start))" > "$RUN/progress.$own_id.tmp"
+  mv -f "$RUN/progress.$own_id.tmp" "$RUN/progress.$own_id"
+  previous_size=$sample_size; previous_time=$sample_time
+  makhzan_usb_mount "$NAS" && [ "$(df -P . | awk 'NR==2 {print $6}')" = "$NAS" ] || { reason='USB storage disconnected'; break; }
+  free=$(df -Pk . | awk 'NR==2 {print $4}')
+  [ "${free:-0}" -gt 32768 ] || { reason='Not enough free USB space (64 MB reserve required)'; break; }
+ done
+ [ -z "$reason" ] || kill_children
+ for child_pid in $children; do wait "$child_pid"; child_rc=$?; [ "$rc" != 0 ] || rc=$child_rc; done
+ children=''
+ if [ "$rc" = 0 ] && [ -z "$reason" ] && [ "$segN" -ge 2 ]; then
+  # A server that ignored a range returns a longer body; never join mismatched pieces.
+  i=0
+  while [ "$i" -lt "$segN" ]; do
+   seg_from=$((i * segsize)); seg_to=$((seg_from + segsize - 1)); [ "$seg_to" -lt "$expected" ] || seg_to=$((expected - 1))
+   have=$(ls -ln "jobs/$id/seg.$i" 2>/dev/null | awk '{print $5}')
+   [ -f "jobs/$id/payload.part" ] || [ "${have:-0}" = "$((seg_to - seg_from + 1))" ] || rc=63
+   i=$((i + 1))
+  done
+  [ "$rc" != 0 ] || assemble || rc=1
+ fi
+ checksum_ok=1
+ if [ "$rc" = 0 ] && [ -z "$reason" ]; then verify_checksum || checksum_ok=0; fi
+ acquire
+ read_job "$target" || { unlock; exit 1; }
+ elapsed=$((base_elapsed + $(uptime_s) - transfer_start))
+ if [ "$state" != downloading ]; then unlock; return; fi
+ if [ "$reason" = window ]; then
+  # Outside the allowed hours: wait politely; partial data is kept.
+  state=queued; error=''; save_job; unlock; return
+ fi
+ if [ "$rc" = 0 ] && [ -z "$reason" ] && [ "$checksum_ok" = 0 ]; then
+  rm -f "jobs/$id/payload.part" "jobs/$id/segstate"
+  state=failed; error='Checksum mismatch'; save_job; unlock; return
+ fi
+ if [ "$rc" = 0 ] && [ -z "$reason" ]; then
+  state=finalizing; save_job && sync || { unlock; exit 1; }
+  if chown root:makhzan "jobs/$id/payload.part" && chmod 0640 "jobs/$id/payload.part" && mv -n "jobs/$id/payload.part" "completed/$id-$name"; then
+   rm -f "jobs/$id/segstate" "jobs/$id/validator.new"
+   state=completed; error=''; immediate=0; save_job && sync || { unlock; exit 1; }
+   [ "$power" != 1 ] || touch "$RUN/power-request"
+   if [ -f "$RUN/power-request" ] && all_done && ! storage_busy; then echo "$(( $(uptime_s) + 60 ))" > "$RUN/shutdown"; fi
+  else state=failed; error='Could not finalize download'; save_job; fi
+ else
+  retry_job "$rc"
+  if [ -n "$reason" ]; then state=failed; error=$reason; fi
+  # Never append an incompatible range response; one fresh restart is safe in the private partial file.
+  if { [ "$rc" = 33 ] || [ "$rc" = 63 ]; } && [ "$attempts" -lt 5 ]; then : > "jobs/$id/payload.part"; rm -f "jobs/$id"/seg.* "jobs/$id/segstate"; fi
+  save_job
+ fi
+ unlock
+}
+tick() {
+ # With the manager off only "download now" jobs run; housekeeping always runs.
+ on=0; enabled && on=1
+ [ "$on" = 1 ] || ls "$RUN"/worker.* >/dev/null 2>&1 || [ -f "$RUN/immediate" ] || return
+ rm -f "$RUN/immediate"
+ cd / || return
+ open_store || { rm -f "$RUN/shutdown"; return; }
+ acquire
+ [ ! -d /var/lock/makhzan-storage.lock ] || { rm -f "$RUN/shutdown"; unlock; return; }
+ next=''; urgent=''; keep_marker=0; now=$(date +%s); slots=$(( $(parallel) - $(active_count) ))
+ window_open=0; in_window && window_open=1
+ for item in jobs/*; do
+  read_job "${item#jobs/}" || continue
+  worker_alive "$id" && continue
+  if [ "$state" = deleting ]; then delete_job; continue; fi
+  if [ "$state" = renaming ]; then finish_rename; continue; fi
+  if [ "$state" = finalizing ]; then
+   # A crash between rename and metadata commit does not redownload or overwrite a completed file.
+   if [ -f "completed/$id-$name" ]; then state=completed; else state=queued; fi
+   save_job
+  elif [ "$state" = downloading ]; then state=queued; save_job; fi
+  [ "$state:$immediate" != queued:1 ] || keep_marker=1
+  if [ "$state" = queued ] && [ "$retry" -le "$now" ] && [ "$immediate" = 1 ]; then
+   urgent="$urgent $id"
+  elif [ "$state" = queued ] && [ "$retry" -le "$now" ] && [ "$on" = 1 ] && [ "$window_open" = 1 ]; then
+   if [ "$start" = 0 ] || { clock_synced && [ "$now" -ge "$start" ]; }; then
+    next="$next$order $id
+"
+   fi
+  fi
+ done
+ deadline=$(cat "$RUN/shutdown" 2>/dev/null)
+ if uint "$deadline"; then
+  if ! all_done; then rm -f "$RUN/shutdown"
+  elif [ "$(uptime_s)" -ge "$deadline" ]; then
+   rm -f "$RUN/shutdown"; sync; unlock
+   /sbin/poweroff
+   return
+  fi
+ fi
+ [ "$keep_marker" = 0 ] || touch "$RUN/immediate"
+ unlock
+ for candidate in $urgent; do "$SELF" worker "$candidate" </dev/null >/dev/null 2>&1 & done
+ [ "$slots" -gt 0 ] || return
+ for candidate in $(printf '%s' "$next" | sort -n | head -n "$slots" | awk '{print $2}'); do "$SELF" worker "$candidate" </dev/null >/dev/null 2>&1 & done
+}
+case "$1" in
+ list) list;;
+ clock) clock_status;;
+ tehran) set_tehran;;
+ sync-clock) /etc/init.d/sysntpd restart >/dev/null 2>&1; ok;;
+ parallel) case "$2" in 1|2|3|4|5|6) uci set makhzan.main.download_parallel="$2" && uci commit makhzan && ok;; *) err 'Choose between 1 and 6 simultaneous downloads';; esac;;
+ segments) case "$2" in 1|2|3|4|5|6|7|8) uci set makhzan.main.download_segments="$2" && uci commit makhzan && ok;; *) err 'Segments must be between 1 and 8';; esac;;
+ window)
+  case "$2" in 0|1) ;; *) err 'Invalid download window';; esac
+  uint "$3" && [ "$3" -le 1439 ] && uint "$4" && [ "$4" -le 1439 ] && [ "$3" != "$4" ] || [ "$2" = 0 ] || err 'Invalid download window'
+  uci set makhzan.main.download_window="$2"
+  [ "$2" = 0 ] || { uci set makhzan.main.download_window_start="$3"; uci set makhzan.main.download_window_end="$4"; }
+  uci commit makhzan && ok;;
+ limit) [ "$2" = 0 ] || { uint "$2" && [ "$2" -ge 1 ] && [ "$2" -le 65536 ]; } || err 'Bandwidth must be between 1 and 65536 KB/s'; uci set makhzan.main.download_limit="$2" && uci commit makhzan && ok;;
+ redial) case "$2" in 0|1) ;; *) err 'Invalid redial option';; esac; uint "$3" && [ "$3" -ge 1 ] && [ "$3" -le 3600 ] || err 'Retry interval must be between 1 and 3600 seconds'; uci set makhzan.main.download_retry_enabled="$2"; uci set makhzan.main.download_retry_interval="$3"; uci commit makhzan && ok;;
+ enabled) case "$2" in 0|1) acquire; uci set makhzan.main.download_enabled="$2" && uci commit makhzan; [ "$2" != 0 ] || stop_workers; unlock; ok;; *) err 'Invalid enabled value';; esac;;
+ stop-workers) stop_workers;;
+ add) shift; add "$@";;
+ pause|resume|cancel|remove|rename|relink|rate|start-now|redownload) action "$1" "$2" "$3";;
+ move) move "$2" "$3";;
+ pause-all|resume-all|clear-finished) all_action "$1";;
+ shutdown-cancel) acquire; rm -f "$RUN/shutdown" "$RUN/power-request"; unlock; ok;;
+ worker) worker "$2";;
+ daemon) while :; do (tick); sleep 3; done;;
+ *) err 'Unknown download command';;
+esac

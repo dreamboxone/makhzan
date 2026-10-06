@@ -14,7 +14,7 @@ PATH=/usr/sbin:/usr/bin:/sbin:/bin
 umask 077
 . /usr/libexec/makhzan-usb.sh || exit 1
 
-VERSION=1.2.0
+VERSION=2.0.0
 SMB_TEMPLATE=/etc/samba/smb.conf.template
 CONTROL_LOCK=/var/lock/makhzan-control.lock
 SECRET_DIR=/tmp/run/makhzan
@@ -22,7 +22,7 @@ USAGE_FILE=$SECRET_DIR/usage.json
 USAGE_LOCK=$SECRET_DIR/usage.lock
 USAGE_MAX_AGE=300
 LIB_TARGET=/mnt/makhzan-library
-RESERVED='shared media library homes global printers print$ ipc$ root admin'
+RESERVED='shared media library downloads homes global printers print$ ipc$ root admin'
 
 quote() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/[[:cntrl:]]/ /g'; }
 ok() { printf '{"ok":true%s}\n' "$1"; }
@@ -285,6 +285,9 @@ smb_sync() {
 		ro=''; for u in $(readonly_list); do managed_user "$u" && ro="$ro${ro:+ }$u"; done
 		smb_share Shared "$r/shared" @makhzan 0660 0770; [ -z "$ro" ] || uci set "samba4.$s.read_list=$ro"
 		smb_share Media "$r/media" @makhzan 0664 0775; [ -z "$ro" ] || uci set "samba4.$s.read_list=$ro"
+		if makhzan_same_fs "$r" "$r/.makhzan-downloads/completed"; then
+			smb_share Downloads "$r/.makhzan-downloads/completed" @makhzan 0640 0750; uci set "samba4.$s.read_only=yes"
+		fi
 		if library_ready; then smb_share Library "$LIB_TARGET" @makhzan 0644 0755; uci set "samba4.$s.read_only=yes"; fi
 		tm=0; [ "$(uci -q get makhzan.main.timemachine)" = 1 ] && tm_supported && tm=1
 		tmgb=$(uci -q get makhzan.main.timemachine_gb); case "$tmgb" in ''|*[!0-9]*) tmgb=0;; esac
@@ -646,6 +649,7 @@ boot() {
 # usernames can be created again after a reinstall and the old files restored. The NAS, swap and extroot
 # partitions stay as they are: they are disk layout, and the router may be running from the extroot.
 uninstall() {
+	[ ! -x /etc/init.d/makhzan-download ] || /etc/init.d/makhzan-download stop >/dev/null 2>&1
 	cfg_root=$(root); r=$cfg_root; root_remount || r=''
 	for u in $(managed_users); do
 		h="$r/users/$u"
@@ -695,7 +699,7 @@ uninstall() {
 
 secret_dir
 case "$1" in
-	status|storage-devices|storage-plan|storage-job|list|boot|usage-scan|trash-list|library-list|remote-status) ;;
+	status|storage-devices|storage-plan|storage-job|list|boot|usage-scan|trash-list|library-list|remote-status|download-list|download-clock) ;;
 	*) control_lock;;
 esac
 case "$1" in
@@ -729,6 +733,7 @@ case "$1" in
 		out=$(/usr/libexec/makhzan-storage "$1" "$2")
 		case "$out" in *'"ok":true'*) apply >/dev/null 2>&1; ok;; *) printf '%s\n' "$out"; exit 1;; esac;;
 	remote-*) /usr/libexec/makhzan-remote "${1#remote-}" "$2" "$3";;
+	download-*) shift_arg=${1#download-}; shift; /usr/libexec/makhzan-download "$shift_arg" "$@";;
 	extroot-off) extroot_off;;
 	option) option_set "$2" "$3";;
 	set) number_set "$2" "$3";;

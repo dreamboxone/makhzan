@@ -8,8 +8,8 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-makhzan
-PKG_VERSION:=1.2.0
-PKG_RELEASE:=5
+PKG_VERSION:=2.0.0
+PKG_RELEASE:=1
 PKG_LICENSE:=GPL-3.0-only
 PKG_LICENSE_FILES:=LICENSE
 PKG_MAINTAINER:=dreamboxone
@@ -19,6 +19,8 @@ include $(INCLUDE_DIR)/package.mk
 # The view is installed under a build-stamped name so browsers never run a cached page from an older release.
 MAKHZAN_BUILD:=$(PKG_VERSION)-$(PKG_RELEASE)
 MAKHZAN_VIEW:=overview_$(subst .,_,$(PKG_VERSION))_$(PKG_RELEASE)
+# Modules the view requires are stamped the same way; LuCI fetches them with a cacheable URL.
+MAKHZAN_CALENDAR:=calendar_$(subst .,_,$(PKG_VERSION))_$(PKG_RELEASE)
 
 define Package/luci-app-makhzan
   SECTION:=luci
@@ -26,12 +28,13 @@ define Package/luci-app-makhzan
   SUBMENU:=3. Applications
   TITLE:=Makhzan USB NAS manager
   PKGARCH:=all
-  DEPENDS:=+luci-base +rpcd +rpcd-mod-file +block-mount +e2fsprogs +parted +swap-utils
+  DEPENDS:=+luci-base +rpcd +rpcd-mod-file +block-mount +e2fsprogs +parted +swap-utils +curl +ca-bundle +jshn
 endef
 
 define Package/luci-app-makhzan/description
 LuCI-managed USB NAS: USB disk planner (NAS, swap, extroot), private per-user SMB
-folders with login lockout, shared and media folders, and MiniDLNA integration.
+folders with login lockout, shared and media folders, MiniDLNA integration, and a
+download manager that saves straight to the USB disk (segmented, queued, scheduled).
 Architecture independent.
 endef
 
@@ -47,20 +50,29 @@ define Package/luci-app-makhzan/conffiles
 endef
 
 define Package/luci-app-makhzan/install
+	# The version shown on the page and reported by makhzanctl must match the package.
+	grep -qx 'VERSION=$(PKG_VERSION)' ./files/usr/sbin/makhzanctl
+	grep -qx "var VERSION = '$(PKG_VERSION)';" ./files/www/luci-static/resources/view/makhzan/overview.js
 	$(INSTALL_DIR) $(1)/etc/config $(1)/etc/init.d $(1)/usr/sbin $(1)/usr/libexec $(1)/usr/share/licenses/makhzan
 	$(INSTALL_CONF) ./files/etc/config/makhzan $(1)/etc/config/makhzan
 	$(INSTALL_BIN) ./files/etc/init.d/makhzan $(1)/etc/init.d/makhzan
 	$(INSTALL_BIN) ./files/usr/sbin/makhzanctl $(1)/usr/sbin/makhzanctl
 	$(INSTALL_BIN) ./files/usr/libexec/makhzan-storage $(1)/usr/libexec/makhzan-storage
 	$(INSTALL_BIN) ./files/usr/libexec/makhzan-remote $(1)/usr/libexec/makhzan-remote
+	$(INSTALL_BIN) ./files/usr/libexec/makhzan-download $(1)/usr/libexec/makhzan-download
+	$(INSTALL_BIN) ./files/etc/init.d/makhzan-download $(1)/etc/init.d/makhzan-download
+	$(INSTALL_DIR) $(1)/etc/hotplug.d/ntp
+	$(INSTALL_DATA) ./files/etc/hotplug.d/ntp/90-makhzan-clock $(1)/etc/hotplug.d/ntp/90-makhzan-clock
 	$(INSTALL_DATA) ./files/usr/libexec/makhzan-usb.sh $(1)/usr/libexec/makhzan-usb.sh
 	$(INSTALL_DATA) ./LICENSE $(1)/usr/share/licenses/makhzan/LICENSE
 	$(INSTALL_DIR) $(1)/usr/share/rpcd/acl.d $(1)/usr/share/luci/menu.d
 	$(INSTALL_DATA) ./files/usr/share/rpcd/acl.d/luci-app-makhzan.json $(1)/usr/share/rpcd/acl.d/luci-app-makhzan.json
 	sed 's|"makhzan/overview"|"makhzan/$(MAKHZAN_VIEW)"|' ./files/usr/share/luci/menu.d/luci-app-makhzan.json > $(1)/usr/share/luci/menu.d/luci-app-makhzan.json
 	$(INSTALL_DIR) $(1)/www/luci-static/resources/view/makhzan/fonts
-	sed 's|@MAKHZAN_BUILD@|$(MAKHZAN_BUILD)|g' ./files/www/luci-static/resources/view/makhzan/overview.js > $(1)/www/luci-static/resources/view/makhzan/$(MAKHZAN_VIEW).js
+	sed -e 's|@MAKHZAN_BUILD@|$(MAKHZAN_BUILD)|g' -e "s|'require view.makhzan.calendar as calendar'|'require view.makhzan.$(MAKHZAN_CALENDAR) as calendar'|" ./files/www/luci-static/resources/view/makhzan/overview.js > $(1)/www/luci-static/resources/view/makhzan/$(MAKHZAN_VIEW).js
+	grep -q "'require view.makhzan.$(MAKHZAN_CALENDAR) as calendar'" $(1)/www/luci-static/resources/view/makhzan/$(MAKHZAN_VIEW).js
 	$(INSTALL_DATA) ./files/www/luci-static/resources/view/makhzan/theme.css $(1)/www/luci-static/resources/view/makhzan/theme.css
+	$(INSTALL_DATA) ./files/www/luci-static/resources/view/makhzan/calendar.js $(1)/www/luci-static/resources/view/makhzan/$(MAKHZAN_CALENDAR).js
 	$(INSTALL_DATA) ./files/www/luci-static/resources/view/makhzan/fonts/* $(1)/www/luci-static/resources/view/makhzan/fonts/
 endef
 

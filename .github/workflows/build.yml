@@ -28,9 +28,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Shell syntax
-        run: for f in files/usr/sbin/makhzanctl files/usr/libexec/makhzan-storage files/usr/libexec/makhzan-usb.sh files/usr/libexec/makhzan-remote files/etc/init.d/makhzan scripts/build-package.sh .github/scripts/smoke-test.sh; do sh -n "$f"; done
+        run: for f in files/usr/sbin/makhzanctl files/usr/libexec/makhzan-storage files/usr/libexec/makhzan-usb.sh files/usr/libexec/makhzan-remote files/usr/libexec/makhzan-download files/etc/init.d/makhzan files/etc/init.d/makhzan-download files/etc/hotplug.d/ntp/90-makhzan-clock scripts/build-package.sh .github/scripts/smoke-test.sh; do sh -n "$f"; done
       - name: JavaScript syntax
-        run: node --check files/www/luci-static/resources/view/makhzan/overview.js
+        run: for f in overview calendar; do node --check files/www/luci-static/resources/view/makhzan/$f.js; done
+      - name: Persian calendar
+        run: node scripts/test-download-calendar.cjs
       - name: Every backend message has a Persian translation
         run: python3 .github/scripts/check-translations.py
 

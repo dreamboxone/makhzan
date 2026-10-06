@@ -2,11 +2,13 @@
 
 ## مخزن @TAG@ — فایل‌سرور خانگی برای OpenWrt
 
-در این نسخه حذف برنامه حساب‌ها، رمزها، تنظیمات و کل پوشهٔ موقت مخزن را پاک می‌کند و پوشه‌های خصوصی روی دیسک متصل را به سطل بازیابی می‌برد. نصب دوباره، دیسک NAS قبلی را از تنظیمات ذخیره‌شده وصل و کادر مسیر «حافظهٔ آماده» را پر می‌کند؛ شناسهٔ قبلی گروه در صورت آزادبودن بازیابی می‌شود.
+نسخه ۲ **مدیر دانلود** را به مخزن اضافه می‌کند: دانلود مستقیم روی دیسک USB با چند اتصال همزمان برای هر فایل، دکمه «دانلود» برای شروع فوری، صف تا ۶ فایل همزمان، زمان‌بندی با تقویم شمسی، دانلود در ساعت‌های دلخواه، سقف سرعت کلی و جداگانه، بررسی کد فایل (SHA-256 یا MD5)، ادامه بعد از قطعی و پشتیبانی از لینک‌های دارای رمز، Referer و Cookie.
 
-> **برای ارتقا، نسخهٔ جدید را روی قبلی نصب کنید و اول حذف نکنید**.
+همچنین بخش تقسیم دیسک حالا طرح فعلی دیسک را نشان می‌دهد و اجازه نمی‌دهد جمع سهم‌ها از حجم دیسک بیشتر شود؛ فایل‌سرور تمام فضای اختصاص‌یافته را بدون رزرو ۵٪ در اختیار می‌گذارد؛ و رابط کاربری در موبایل و در حالت روشن و تیره بهتر شده است.
 
-یک بسته برای **همهٔ معماری‌ها**: مخزن کد کامپایل‌شده ندارد، پس همین فایل‌ها روی همهٔ روترها نصب می‌شوند.
+> **برای ارتقا، نسخه جدید را روی قبلی نصب کنید و اول حذف نکنید**.
+
+یک بسته برای **همه معماری‌ها**: مخزن کد کامپایل‌شده ندارد، پس همین فایل‌ها روی همه روترها نصب می‌شوند.
 
 | پردازنده | OpenWrt 25.12 و جدیدتر | OpenWrt 24.10 و قدیمی‌تر |
 |---|---|---|
@@ -41,7 +43,9 @@ opkg install /tmp/@IPK@
 
 ## Makhzan @TAG@ — home NAS for OpenWrt
 
-Removal now clears managed accounts, passwords, settings and the entire temporary directory, moving private homes on an available disk to recovery trash. Reinstalling reconnects the saved NAS disk, fills its path in Existing storage and reuses the former group ID when available.
+Version 2 adds a **download manager**: downloads go straight to the USB disk with several connections per file, a Download button that starts at once, a queue of up to six files at a time, Persian-calendar scheduling, download hours, total and per-download speed limits, checksum verification (SHA-256 or MD5), resume after disconnects, and links that need a password, Referer or Cookie.
+
+The disk planner now shows the disk's current layout and never lets the roles add up to more than the disk; the file server gets all of its space (no 5% root reserve); and the interface works better on phones and in light and dark mode.
 
 > **To upgrade, install the new version over the existing one; do not uninstall first.**
 

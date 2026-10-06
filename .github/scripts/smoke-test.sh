@@ -28,6 +28,10 @@ done
 echo "== LuCI files"
 ls /www/luci-static/resources/view/makhzan/overview_*.js /www/luci-static/resources/view/makhzan/theme.css
 grep -q '"path": "makhzan/overview_' /usr/share/luci/menu.d/luci-app-makhzan.json
+# Every module the stamped view requires must be installed under the same stamped name.
+for module in $(sed -n "s/^'require view\.makhzan\.\([a-z0-9_]*\) as .*/\1/p" /www/luci-static/resources/view/makhzan/overview_*.js); do
+	ls "/www/luci-static/resources/view/makhzan/$module.js"
+done
 grep -q '/tmp/run/makhzan/secret' /usr/share/rpcd/acl.d/luci-app-makhzan.json
 
 echo "== backend"

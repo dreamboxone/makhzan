@@ -11,8 +11,9 @@
 .mk [lang=fa],.mk button.mk-btn[lang=fa],.mk button.mk-btn[lang=fa] *{font-family:Vazirmatn,Tahoma,sans-serif!important}
 .mk code,.mk code *{font-family:ui-monospace,Consolas,monospace!important}
 
-.mk,.mk-dialog{--bg:#f4f6fb;--panel:#fff;--text:#1b2540;--muted:#66728c;--line:#e3e8f2;--soft:#f6f8fd;--shadow:0 10px 30px -12px #1b2a5c26}
-.mk{background:var(--bg);color:var(--text);padding:24px;border-radius:26px;max-width:1240px;margin:auto;font-family:"Segoe UI",Tahoma,Arial,sans-serif}
+/* color-scheme: native controls (number spinners, date and time pickers, scrollbars) follow the Makhzan theme, not LuCI's. */
+.mk,.mk-dialog{color-scheme:light;--bg:#f4f6fb;--panel:#fff;--text:#1b2540;--muted:#66728c;--line:#e3e8f2;--soft:#f6f8fd;--shadow:0 10px 30px -12px #1b2a5c26}
+.mk{background:var(--bg);color:var(--text);padding:24px;border-radius:26px;max-width:1240px;margin:auto;font-family:"Segoe UI",Tahoma,Arial,sans-serif;color-scheme:light}
 .mk *{box-sizing:border-box}
 .mk h2,.mk h3{color:inherit;margin:0 0 14px}
 .mk p{line-height:1.9;margin:8px 0}
@@ -76,6 +77,7 @@
 .mk-add input{flex:1 1 220px}
 .mk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
 .mk-columns{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:20px;align-items:start}
+.mk-columns.mk-even{align-items:stretch}
 
 /* Cards */
 .mk-card{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:22px;margin-bottom:20px;box-shadow:var(--shadow);min-width:0;position:relative}
@@ -105,6 +107,36 @@
 .mk-field{display:block;margin:12px 0}
 .mk-field span{display:block;font-weight:700;margin-bottom:2px}
 .mk-field input{width:100%}
+.mk-field.mk-field-inline{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:10px 0}
+.mk-field.mk-field-inline span{margin:0}
+.mk .mk-field.mk-field-inline input,.mk .mk-field.mk-field-inline select{width:130px;flex:none;margin:0;min-height:38px;padding:6px 10px}
+.mk .mk-field.mk-field-inline select{width:auto;min-width:150px}
+.mk .mk-field.mk-field-wide{flex:1 1 300px;min-width:0}
+.mk .mk-field.mk-field-wide input{flex:1 1 200px;width:auto;min-width:0}
+.mk-fields-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 24px}
+.mk-role-status{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;margin:2px 0 6px}
+.mk-role-status:empty{display:none}
+.mk-role-status .mk-ico{width:15px;height:15px;flex:none}
+.mk-role-status.on{color:#047857}
+.mk-role-status.off{color:#b45309}
+.mk-dark .mk-role-status.on{color:#6ee7b7}
+.mk-dark .mk-role-status.off{color:#fcd34d}
+.mk-role-limit{display:block;color:#b45309;font-weight:700;margin:4px 0}
+.mk-role-limit:empty{display:none}
+.mk-dark .mk-role-limit{color:#fcd34d}
+/* Card action row: in RTL, flex-end is the bottom-left corner. */
+.mk-card-foot{display:flex;justify-content:flex-end;align-items:center;gap:12px;flex-wrap:wrap;margin-top:18px}
+.mk-slot-msg{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;border-radius:10px;padding:6px 10px;border:1px solid transparent}
+.mk-slot-msg:empty{display:none}
+.mk-slot-msg .mk-ico{width:16px;height:16px;flex:none}
+.mk-slot-msg.ok{color:#047857;background:#ecfdf5;border-color:#a7f3d0}
+.mk-slot-msg.error{color:#c81e3a;background:#fff0f2;border-color:#fecdd5}
+.mk-dark .mk-slot-msg.ok{color:#a7f3d0;background:#0f2e25;border-color:#166534}
+.mk-dark .mk-slot-msg.error{color:#ffc2cd;background:#3d1f2a;border-color:#7a3346}
+.mk-fields-row>.mk-switch-row{margin:0}
+.mk-link-row{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap}
+.mk-link-row textarea.mk-links{flex:1 1 320px;width:auto;min-height:44px}
+.mk-link-row .mk-btn{margin:6px 0;align-self:flex-start}
 .mk-msg{color:#c81e3a;min-height:1em;font-weight:600}
 .mk-inline-error{display:inline-flex;align-items:center;gap:6px;margin-inline-start:10px;color:#c81e3a;background:#fff0f2;border:1px solid #fecdd5;border-radius:10px;padding:6px 10px;font-size:13px;font-weight:700;animation:mk-pop .15s ease-out}
 .mk-dark .mk-inline-error{background:#3d1f2a;color:#ffc2cd;border-color:#7a3346}
@@ -146,6 +178,9 @@
 /* Alerts */
 .mk-alert{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;background:#fff7e6;border:1px solid #fcdca0;color:#8a5a12;padding:13px 15px;border-radius:14px;margin:12px 0}
 .mk-alert > .mk-ico{flex:none;margin-top:4px}
+.mk-alert-close{flex:none;margin-inline-start:auto;background:none;border:0;padding:2px;cursor:pointer;color:inherit;opacity:.65;border-radius:8px;line-height:0}
+.mk-alert-close:hover,.mk-alert-close:focus-visible{opacity:1;background:#0000000f}
+.mk-alert-close .mk-ico{width:16px;height:16px}
 .mk-alert > span:not(.mk-ico){flex:1 1 200px}
 .mk-alert.error{background:#fff0f2;border-color:#fecdd5;color:#b4233d}
 .mk-alert.warn{background:#fff3dc;border-color:#f7b955;color:#7a4300;font-weight:700}
@@ -199,7 +234,7 @@
 .mk-link:hover{text-decoration:underline}
 
 /* Dark mode */
-.mk-dark{--bg:#0d1526;--panel:#16213a;--text:#e8eeff;--muted:#9fb0d0;--line:#2a3a5c;--soft:#1b2846;--shadow:0 10px 30px -12px #000a}
+.mk-dark{color-scheme:dark;--bg:#0d1526;--panel:#16213a;--text:#e8eeff;--muted:#9fb0d0;--line:#2a3a5c;--soft:#1b2846;--shadow:0 10px 30px -12px #000a}
 .mk-dark .mk-btn.soft-blue{background:#1e3a8a55;color:#93b4ff;border-color:#2c4c9c}
 .mk-dark .mk-btn.soft-violet{background:#4c1d9555;color:#c4b0ff;border-color:#5b3aa8}
 .mk-dark .mk-btn.soft-amber{background:#78350f55;color:#fcd38d;border-color:#8a5a1c}
@@ -230,6 +265,8 @@
 .mk-tab.mk-tab-on{background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;box-shadow:0 6px 14px -8px #4f46e5}
 .mk-tab:focus-visible{outline:3px solid #93c5fd;outline-offset:2px}
 .mk-panel[hidden]{display:none}
+/* LuCI themes give some inputs (file pickers) display:block, which would undo the hidden attribute. */
+.mk [hidden]{display:none!important}
 .mk-panel{animation:mk-fade .15s ease-out}
 @keyframes mk-fade{from{opacity:.4}}
 
@@ -241,6 +278,18 @@
 .mk-urow strong{text-align:end;font-size:13px}
 
 /* Rows and helpers */
+.mk-feedback{display:inline-block;color:#059669;line-height:1.8;flex:1 1 220px;margin:6px}
+.mk-download-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+.mk-download-filters{grid-template-columns:2fr 1fr 1fr}
+.mk textarea.mk-links{width:100%;min-height:88px;resize:vertical;background:var(--panel);color:var(--text);border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;margin:6px 0;font-family:ui-monospace,Consolas,monospace!important;font-size:13px;white-space:pre;overflow-x:auto}
+.mk textarea.mk-links:focus{outline:none;border-color:#6366f1;box-shadow:0 0 0 4px #6366f126}
+.mk-advanced{border:1px solid var(--line);border-radius:14px;padding:4px 14px;margin:12px 0;background:var(--soft)}
+.mk-download-summary{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.mk-download-item .mk-chips{margin-inline-start:0}
+.mk-download-item .mk-row .mk-btn.mk-small{margin-top:6px}
+.mk-download-item{border:1px solid var(--line);background:var(--soft);border-radius:14px;padding:16px;margin:12px 0;overflow-wrap:anywhere}
+.mk-download-item code{display:block;overflow-wrap:anywhere;font-size:12px;margin:8px 0}
+.mk-clock{font-size:18px;font-weight:700;color:var(--text)}
 .mk-grow{flex:1 1 200px;min-width:0}
 .mk-grow small{display:block}
 .mk-mrow{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 0;border-bottom:1px solid var(--line)}
@@ -250,6 +299,8 @@
 .mk-row.mk-inline{margin:8px 0 0;gap:8px}
 .mk-option{margin:10px 0;align-items:flex-start;font-weight:600}
 .mk-option span{line-height:1.8}
+/* Labels may wrap, so the switch sits at the top; without a top margin it lines up with the first text line. */
+.mk .mk-option>input.mk-switch{margin-top:0}
 .mk-list-tall{max-height:none}
 .mk-chip.info{background:#eef2ff;color:#4338ca;border-color:#c7d2fe}
 .mk-dark .mk-chip.info{background:#312e8155;color:#c7d2fe;border-color:#4f46e5}
@@ -266,4 +317,5 @@
 	.mk-tab{flex:none;padding:9px 11px;font-size:13px}
 	.mk-urow{grid-template-columns:1fr auto;grid-template-areas:"name size" "bar bar"}
 	.mk-urow-name{grid-area:name}.mk-urow .mk-track{grid-area:bar}.mk-urow strong{grid-area:size}
+	.mk-download-filters,.mk-download-fields{grid-template-columns:1fr}
 }
