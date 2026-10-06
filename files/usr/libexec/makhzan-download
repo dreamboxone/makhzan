@@ -77,12 +77,13 @@ unlock() { lock -u "$LOCK"; HAVE_LOCK=0; }
 read_job() {
  valid_id "$1" && [ -d "jobs/$1" ] && [ ! -L "jobs/$1" ] && [ ! -L "jobs/$1/meta.json" ] || return 1
  json_load "$(cat "jobs/$1/meta.json" 2>/dev/null)" || return 1
- json_get_vars id url name start power state attempts retry error expected order elapsed rename_to segments rate checksum
+ json_get_vars id url name start power state attempts retry error expected order elapsed rename_to segments rate checksum immediate
  expected=${expected:-0}
  order=${order:-0}
- elapsed=${elapsed:-0}; rename_to=${rename_to:-}; segments=${segments:-1}; rate=${rate:-0}; checksum=${checksum:-}
+ elapsed=${elapsed:-0}; rename_to=${rename_to:-}; segments=${segments:-1}; rate=${rate:-0}; checksum=${checksum:-}; immediate=${immediate:-0}
  uint "$segments" && [ "$segments" -ge 1 ] && [ "$segments" -le 8 ] && uint "$rate" && [ "$rate" -le 65536 ] || return 1
  valid_checksum "$checksum" || return 1
+ case "$immediate" in 0|1) ;; *) return 1;; esac
  [ "$id" = "$1" ] && valid_url "$url" && valid_name "$name" && uint "$start" && uint "$attempts" && uint "$retry" || return 1
  case "$expected" in ''|*[!0-9]*) return 1;; esac
  case "$power" in 0|1) ;; *) return 1;; esac
@@ -96,7 +97,7 @@ save_job() {
  json_add_int expected "$expected"
  json_add_int order "$order"
  json_add_int elapsed "$elapsed"; json_add_string rename_to "$rename_to"
- json_add_int segments "$segments"; json_add_int rate "$rate"; json_add_string checksum "$checksum"
+ json_add_int segments "$segments"; json_add_int rate "$rate"; json_add_string checksum "$checksum"; json_add_int immediate "$immediate"
  json_dump > "jobs/$id/meta.tmp" && mv -f "jobs/$id/meta.tmp" "jobs/$id/meta.json"
 }
 worker_alive() {
@@ -108,10 +109,14 @@ worker_alive() {
  return 1
 }
 active_count() { n=0; for f in "$RUN"/worker.*; do worker_alive "${f##*.}" && n=$((n+1)); done; echo "$n"; }
-parallel() { p=$(uci -q get makhzan.main.download_parallel); case "$p" in 2|3) echo "$p";; *) echo 1;; esac; }
+parallel() { p=$(uci -q get makhzan.main.download_parallel); case "$p" in 2|3|4|5|6) echo "$p";; *) echo 1;; esac; }
+# Connections across all transfers are capped so a small router keeps memory and CPU to spare.
+MAX_CONNECTIONS=16
+MAX_WORKERS=8
 enabled() { [ "$(uci -q get makhzan.main.download_enabled)" = 1 ]; }
-bandwidth() { p=$(uci -q get makhzan.main.download_limit); if uint "$p" && [ "$p" -ge 1 ] && [ "$p" -le 65536 ]; then echo "$p"; else echo 8192; fi; }
-segments_default() { p=$(uci -q get makhzan.main.download_segments); case "$p" in 1|2|3|4|5|6|7|8) echo "$p";; *) echo 4;; esac; }
+# Total limit in KB/s; 0 means no limit. An unset or invalid value falls back to 8192.
+bandwidth() { p=$(uci -q get makhzan.main.download_limit); if [ "$p" = 0 ] || { uint "$p" && [ "$p" -le 65536 ]; }; then echo "$p"; else echo 8192; fi; }
+segments_default() { p=$(uci -q get makhzan.main.download_segments); case "$p" in 1|2|3|4|5|6|7|8) echo "$p";; *) echo 8;; esac; }
 job_bytes() { ls -ln "jobs/$1/payload.part" "jobs/$1"/seg.* 2>/dev/null | awk '{s+=$5} END {print s+0}'; }
 # Download window: minutes after midnight, router time. Disabled unless download_window=1.
 window_enabled() { [ "$(uci -q get makhzan.main.download_window)" = 1 ]; }
@@ -133,7 +138,7 @@ retry_job() {
  esac
 }
 stop_workers() { for f in "$RUN"/worker.*; do worker_alive "${f##*.}" && kill "$(cat "$f")" 2>/dev/null; done; rm -f "$RUN/shutdown" "$RUN/power-request"; }
-conf_escape() { printf '%s' "$1" | sed 's/\/\\/g; s/"/\\"/g'; }
+conf_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 auth_config() {
  : > "$2" || return 1
  [ -n "$1" ] || return 0
@@ -223,8 +228,10 @@ space_available() {
 }
 add() {
  token=$1; url=$2; name=$3; start=$4; power=$5
- segments=${7:-}; rate=${8:-0}; checksum=$(printf '%s' "${9:-}" | tr 'A-F' 'a-f')
+ segments=${7:-}; rate=${8:-0}; immediate=${10:-0}; checksum=$(printf '%s' "${9:-}" | tr 'A-F' 'a-f')
  [ -n "$segments" ] || segments=$(segments_default)
+ case "$immediate" in 0|1) ;; *) err 'Invalid download option';; esac
+ [ "$immediate" = 0 ] || start=0
  case "$segments" in 1|2|3|4|5|6|7|8) ;; *) err 'Segments must be between 1 and 8';; esac
  uint "$rate" && [ "$rate" -le 65536 ] || err 'Speed limit must be between 0 and 65536 KB/s'
  valid_checksum "$checksum" || err 'Checksum must be 32 (MD5) or 64 (SHA-256) hexadecimal characters'
@@ -256,6 +263,7 @@ add() {
  mkdir -p -m 0700 "jobs/$id" && cp "$auth_tmp" "jobs/$id/auth.conf" && save_job || { unlock; err 'Could not save download on USB'; }
  sync
  rm -f "$RUN/shutdown" "$RUN/power-request"
+ [ "$immediate" = 0 ] || touch "$RUN/immediate"
  unlock; ok
 }
 delete_job() {
@@ -278,7 +286,7 @@ action() {
  acquire
  read_job "$target" || { unlock; err 'Download not found'; }
  case "$op" in
-  pause) case "$state" in queued|downloading) state=paused;; *) unlock; err 'This download cannot be paused';; esac;;
+  pause) case "$state" in queued|downloading) state=paused; immediate=0;; *) unlock; err 'This download cannot be paused';; esac;;
   resume) case "$state" in paused|failed) state=queued; attempts=0; retry=0; error='';; *) unlock; err 'This download cannot be resumed';; esac;;
   cancel) case "$state" in completed|finalizing) unlock; err 'A completed download cannot be cancelled';; esac; state=cancelled;;
   remove)
@@ -301,7 +309,7 @@ action() {
    rate=$newname;;
   start-now)
    case "$state" in queued|paused|failed) ;; *) unlock; err 'This download cannot be started now';; esac
-   state=queued; start=0; retry=0; attempts=0; error='';;
+   state=queued; start=0; retry=0; attempts=0; error=''; immediate=1;;
   redownload)
    case "$state" in completed|cancelled|failed) ;; *) unlock; err 'This download cannot be downloaded again';; esac
    worker_alive "$id" && { unlock; err 'Wait for the transfer to stop'; }
@@ -311,6 +319,7 @@ action() {
  esac
  save_job || { unlock; err 'Could not save download on USB'; }
  rm -f "$RUN/shutdown" "$RUN/power-request"
+ [ "$immediate" = 0 ] || touch "$RUN/immediate"
  unlock; ok
 }
 # Move a waiting download earlier or later. Orders of the affected items are exchanged, so
@@ -381,7 +390,7 @@ list() {
    json_add_int expected "$expected"
    json_add_int order "$order"
    json_add_string url "$url"; json_add_string category "$(category "$name")"
-   json_add_int segments "$segments"; json_add_int rate "$rate"; json_add_string checksum "$checksum"
+   json_add_int segments "$segments"; json_add_int rate "$rate"; json_add_string checksum "$checksum"; json_add_boolean immediate "$immediate"
    json_add_string phase "$(cat "$RUN/phase.$id" 2>/dev/null)"
    speed=0; eta=0
    if worker_alive "$id" && [ "$state" = downloading ]; then
@@ -454,7 +463,9 @@ verify_checksum() {
 worker() {
  open_store || exit 1
  acquire
- read_job "$1" && [ "$state" = queued ] && enabled && in_window && ! storage_busy && ! worker_alive "$1" && [ "$(active_count)" -lt "$(parallel)" ] || { unlock; exit 1; }
+ read_job "$1" && [ "$state" = queued ] && ! storage_busy && ! worker_alive "$1" || { unlock; exit 1; }
+ if [ "$immediate" = 1 ]; then [ "$(active_count)" -lt "$MAX_WORKERS" ] || { unlock; exit 1; }
+ else enabled && in_window && [ "$(active_count)" -lt "$(parallel)" ] || { unlock; exit 1; }; fi
  state=downloading; error=''; save_job || { unlock; exit 1; }
  own_id=$id
  echo $$ > "$RUN/worker.$own_id"
@@ -479,6 +490,7 @@ worker() {
   segN=$(awk '{print $1}' "jobs/$id/segstate" 2>/dev/null); uint "$segN" || segN=1
  elif [ ! -s "jobs/$id/payload.part" ] && [ "$ranges" = 1 ] && [ "$segments" -gt 1 ]; then
   segN=$((expected / 1048576)); [ "$segN" -le "$segments" ] || segN=$segments
+  cap=$((MAX_CONNECTIONS / $(parallel))); [ "$segN" -le "$cap" ] || segN=$cap
  fi
  [ "$segN" -ge 2 ] || segN=1
  acquire
@@ -492,8 +504,11 @@ worker() {
  fi
  redirect='=http,https'; case "$url" in https:*) redirect='=https';; esac
  # A job limit is the total for this download; otherwise the global limit is shared by the queue.
- if [ "$rate" -gt 0 ]; then rate_kb=$rate; else rate_kb=$(( $(bandwidth) / $(parallel) )); fi
- [ "$rate_kb" -ge 1 ] || rate_kb=1
+ # rate_kb 0 means unlimited: curl treats --limit-rate 0 as no limit.
+ total_kb=$(bandwidth)
+ if [ "$rate" -gt 0 ]; then rate_kb=$rate
+ elif [ "$total_kb" = 0 ]; then rate_kb=0
+ else rate_kb=$(( total_kb / $(parallel) )); [ "$rate_kb" -ge 1 ] || rate_kb=1; fi
  base_elapsed=$elapsed; transfer_start=$(uptime_s)
  previous_size=$(job_bytes "$id"); previous_time=$transfer_start
  rc=0; reason=''
@@ -544,7 +559,7 @@ worker() {
   sleep 1
   read_job "$target" || { reason='Download metadata is unavailable'; break; }
   [ "$state" = downloading ] || { reason=stopped; break; }
-  in_window || { reason=window; break; }
+  [ "$immediate" = 1 ] || in_window || { reason=window; break; }
   sample_time=$(uptime_s); sample_size=$(job_bytes "$id")
   delta=$((sample_time - previous_time)); speed=0
   [ "$delta" -le 0 ] || speed=$(( (sample_size - previous_size) / delta ))
@@ -588,7 +603,7 @@ worker() {
   state=finalizing; save_job && sync || { unlock; exit 1; }
   if chown root:makhzan "jobs/$id/payload.part" && chmod 0640 "jobs/$id/payload.part" && mv -n "jobs/$id/payload.part" "completed/$id-$name"; then
    rm -f "jobs/$id/segstate" "jobs/$id/validator.new"
-   state=completed; error=''; save_job && sync || { unlock; exit 1; }
+   state=completed; error=''; immediate=0; save_job && sync || { unlock; exit 1; }
    [ "$power" != 1 ] || touch "$RUN/power-request"
    if [ -f "$RUN/power-request" ] && all_done && ! storage_busy; then echo "$(( $(uptime_s) + 60 ))" > "$RUN/shutdown"; fi
   else state=failed; error='Could not finalize download'; save_job; fi
@@ -602,12 +617,16 @@ worker() {
  unlock
 }
 tick() {
- enabled || return
+ # With the manager off only "download now" jobs run; housekeeping always runs.
+ on=0; enabled && on=1
+ [ "$on" = 1 ] || ls "$RUN"/worker.* >/dev/null 2>&1 || [ -f "$RUN/immediate" ] || return
+ rm -f "$RUN/immediate"
  cd / || return
  open_store || { rm -f "$RUN/shutdown"; return; }
  acquire
  [ ! -d /var/lock/makhzan-storage.lock ] || { rm -f "$RUN/shutdown"; unlock; return; }
- next=''; now=$(date +%s); slots=$(( $(parallel) - $(active_count) ))
+ next=''; urgent=''; keep_marker=0; now=$(date +%s); slots=$(( $(parallel) - $(active_count) ))
+ window_open=0; in_window && window_open=1
  for item in jobs/*; do
   read_job "${item#jobs/}" || continue
   worker_alive "$id" && continue
@@ -618,7 +637,10 @@ tick() {
    if [ -f "completed/$id-$name" ]; then state=completed; else state=queued; fi
    save_job
   elif [ "$state" = downloading ]; then state=queued; save_job; fi
-  if [ "$state" = queued ] && [ "$retry" -le "$now" ] && in_window; then
+  [ "$state:$immediate" != queued:1 ] || keep_marker=1
+  if [ "$state" = queued ] && [ "$retry" -le "$now" ] && [ "$immediate" = 1 ]; then
+   urgent="$urgent $id"
+  elif [ "$state" = queued ] && [ "$retry" -le "$now" ] && [ "$on" = 1 ] && [ "$window_open" = 1 ]; then
    if [ "$start" = 0 ] || { clock_synced && [ "$now" -ge "$start" ]; }; then
     next="$next$order $id
 "
@@ -634,7 +656,9 @@ tick() {
    return
   fi
  fi
+ [ "$keep_marker" = 0 ] || touch "$RUN/immediate"
  unlock
+ for candidate in $urgent; do "$SELF" worker "$candidate" </dev/null >/dev/null 2>&1 & done
  [ "$slots" -gt 0 ] || return
  for candidate in $(printf '%s' "$next" | sort -n | head -n "$slots" | awk '{print $2}'); do "$SELF" worker "$candidate" </dev/null >/dev/null 2>&1 & done
 }
@@ -643,7 +667,7 @@ case "$1" in
  clock) clock_status;;
  tehran) set_tehran;;
  sync-clock) /etc/init.d/sysntpd restart >/dev/null 2>&1; ok;;
- parallel) case "$2" in 1|2|3) uci set makhzan.main.download_parallel="$2" && uci commit makhzan && ok;; *) err 'Choose 1, 2 or 3 simultaneous downloads';; esac;;
+ parallel) case "$2" in 1|2|3|4|5|6) uci set makhzan.main.download_parallel="$2" && uci commit makhzan && ok;; *) err 'Choose between 1 and 6 simultaneous downloads';; esac;;
  segments) case "$2" in 1|2|3|4|5|6|7|8) uci set makhzan.main.download_segments="$2" && uci commit makhzan && ok;; *) err 'Segments must be between 1 and 8';; esac;;
  window)
   case "$2" in 0|1) ;; *) err 'Invalid download window';; esac
@@ -651,7 +675,7 @@ case "$1" in
   uci set makhzan.main.download_window="$2"
   [ "$2" = 0 ] || { uci set makhzan.main.download_window_start="$3"; uci set makhzan.main.download_window_end="$4"; }
   uci commit makhzan && ok;;
- limit) uint "$2" && [ "$2" -ge 1 ] && [ "$2" -le 65536 ] || err 'Bandwidth must be between 1 and 65536 KB/s'; uci set makhzan.main.download_limit="$2" && uci commit makhzan && ok;;
+ limit) [ "$2" = 0 ] || { uint "$2" && [ "$2" -ge 1 ] && [ "$2" -le 65536 ]; } || err 'Bandwidth must be between 1 and 65536 KB/s'; uci set makhzan.main.download_limit="$2" && uci commit makhzan && ok;;
  redial) case "$2" in 0|1) ;; *) err 'Invalid redial option';; esac; uint "$3" && [ "$3" -ge 1 ] && [ "$3" -le 3600 ] || err 'Retry interval must be between 1 and 3600 seconds'; uci set makhzan.main.download_retry_enabled="$2"; uci set makhzan.main.download_retry_interval="$3"; uci commit makhzan && ok;;
  enabled) case "$2" in 0|1) acquire; uci set makhzan.main.download_enabled="$2" && uci commit makhzan; [ "$2" != 0 ] || stop_workers; unlock; ok;; *) err 'Invalid enabled value';; esac;;
  stop-workers) stop_workers;;

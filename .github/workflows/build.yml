@@ -30,7 +30,7 @@ jobs:
       - name: Shell syntax
         run: for f in files/usr/sbin/makhzanctl files/usr/libexec/makhzan-storage files/usr/libexec/makhzan-usb.sh files/usr/libexec/makhzan-remote files/usr/libexec/makhzan-download files/etc/init.d/makhzan files/etc/init.d/makhzan-download files/etc/hotplug.d/ntp/90-makhzan-clock scripts/build-package.sh .github/scripts/smoke-test.sh; do sh -n "$f"; done
       - name: JavaScript syntax
-        run: node --check files/www/luci-static/resources/view/makhzan/overview.js && node --check files/www/luci-static/resources/view/makhzan/calendar.js
+        run: for f in overview calendar; do node --check files/www/luci-static/resources/view/makhzan/$f.js; done
       - name: Persian calendar
         run: node scripts/test-download-calendar.cjs
       - name: Every backend message has a Persian translation
@@ -54,7 +54,7 @@ jobs:
             "openwrt/sdk:x86-64-v$release" bash -ec '
               [ -f include/toplevel.mk ] || ./setup.sh
               ./scripts/feeds update base packages luci >/dev/null
-              ./scripts/feeds install luci-base rpcd rpcd-mod-file block-mount e2fsprogs parted swap-utils curl ca-bundle jshn >/dev/null
+              ./scripts/feeds install luci-base rpcd rpcd-mod-file block-mount e2fsprogs parted swap-utils >/dev/null
               /src/scripts/build-package.sh "$PWD"'
           ls -l out
 

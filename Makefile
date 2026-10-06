@@ -8,7 +8,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-makhzan
-PKG_VERSION:=2.0.1
+PKG_VERSION:=2.0.2
 PKG_RELEASE:=1
 PKG_LICENSE:=GPL-3.0-only
 PKG_LICENSE_FILES:=LICENSE
@@ -19,6 +19,7 @@ include $(INCLUDE_DIR)/package.mk
 # The view is installed under a build-stamped name so browsers never run a cached page from an older release.
 MAKHZAN_BUILD:=$(PKG_VERSION)-$(PKG_RELEASE)
 MAKHZAN_VIEW:=overview_$(subst .,_,$(PKG_VERSION))_$(PKG_RELEASE)
+# Modules the view requires are stamped the same way; LuCI fetches them with a cacheable URL.
 MAKHZAN_CALENDAR:=calendar_$(subst .,_,$(PKG_VERSION))_$(PKG_RELEASE)
 
 define Package/luci-app-makhzan
@@ -32,7 +33,8 @@ endef
 
 define Package/luci-app-makhzan/description
 LuCI-managed USB NAS: USB disk planner (NAS, swap, extroot), private per-user SMB
-folders with login lockout, shared and media folders, and MiniDLNA integration.
+folders with login lockout, shared and media folders, MiniDLNA integration, and a
+download manager that saves straight to the USB disk (segmented, queued, scheduled).
 Architecture independent.
 endef
 
@@ -48,6 +50,9 @@ define Package/luci-app-makhzan/conffiles
 endef
 
 define Package/luci-app-makhzan/install
+	# The version shown on the page and reported by makhzanctl must match the package.
+	grep -qx 'VERSION=$(PKG_VERSION)' ./files/usr/sbin/makhzanctl
+	grep -qx "var VERSION = '$(PKG_VERSION)';" ./files/www/luci-static/resources/view/makhzan/overview.js
 	$(INSTALL_DIR) $(1)/etc/config $(1)/etc/init.d $(1)/usr/sbin $(1)/usr/libexec $(1)/usr/share/licenses/makhzan
 	$(INSTALL_CONF) ./files/etc/config/makhzan $(1)/etc/config/makhzan
 	$(INSTALL_BIN) ./files/etc/init.d/makhzan $(1)/etc/init.d/makhzan
@@ -64,7 +69,8 @@ define Package/luci-app-makhzan/install
 	$(INSTALL_DATA) ./files/usr/share/rpcd/acl.d/luci-app-makhzan.json $(1)/usr/share/rpcd/acl.d/luci-app-makhzan.json
 	sed 's|"makhzan/overview"|"makhzan/$(MAKHZAN_VIEW)"|' ./files/usr/share/luci/menu.d/luci-app-makhzan.json > $(1)/usr/share/luci/menu.d/luci-app-makhzan.json
 	$(INSTALL_DIR) $(1)/www/luci-static/resources/view/makhzan/fonts
-	sed -e 's|@MAKHZAN_BUILD@|$(MAKHZAN_BUILD)|g' -e 's|view.makhzan.calendar as|view.makhzan.$(MAKHZAN_CALENDAR) as|' ./files/www/luci-static/resources/view/makhzan/overview.js > $(1)/www/luci-static/resources/view/makhzan/$(MAKHZAN_VIEW).js
+	sed -e 's|@MAKHZAN_BUILD@|$(MAKHZAN_BUILD)|g' -e "s|'require view.makhzan.calendar as calendar'|'require view.makhzan.$(MAKHZAN_CALENDAR) as calendar'|" ./files/www/luci-static/resources/view/makhzan/overview.js > $(1)/www/luci-static/resources/view/makhzan/$(MAKHZAN_VIEW).js
+	grep -q "'require view.makhzan.$(MAKHZAN_CALENDAR) as calendar'" $(1)/www/luci-static/resources/view/makhzan/$(MAKHZAN_VIEW).js
 	$(INSTALL_DATA) ./files/www/luci-static/resources/view/makhzan/theme.css $(1)/www/luci-static/resources/view/makhzan/theme.css
 	$(INSTALL_DATA) ./files/www/luci-static/resources/view/makhzan/calendar.js $(1)/www/luci-static/resources/view/makhzan/$(MAKHZAN_CALENDAR).js
 	$(INSTALL_DATA) ./files/www/luci-static/resources/view/makhzan/fonts/* $(1)/www/luci-static/resources/view/makhzan/fonts/

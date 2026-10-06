@@ -38,6 +38,28 @@ disk_mounts() {
 disk_swaps() {
  awk -v d="$1" 'NR>1 && ($1==d || (index($1,d)==1 && substr($1,length(d)+1) ~ /^[0-9]+$/)) {print $1}' /proc/swaps
 }
+# Makhzan partitions already on a disk, found by the labels apply() gives them: size in MiB and
+# whether each one is in use (NAS mounted as the Makhzan root, swap on, extroot as the overlay).
+layout() {
+ l_ext=0; l_swap=0; l_nas=0; a_ext=false; a_swap=false; a_nas=false
+ l_root=$(uci -q get makhzan.main.root)
+ for part in /sys/class/block/${1#/dev/}[0-9]*; do
+  [ -f "$part/partition" ] || continue
+  p_dev=/dev/${part##*/}; p_size=$(( $(cat "$part/size") / 2048 ))
+  case "$(binfo "$p_dev" LABEL)" in
+   makhzan-extroot)
+    l_ext=$p_size
+    awk -v d="$p_dev" '$1==d && ($2=="/" || $2=="/overlay" || $2=="/rom/overlay") {f=1} END {exit !f}' /proc/mounts && a_ext=true;;
+   makhzan-swap)
+    l_swap=$p_size
+    awk -v d="$p_dev" 'NR>1 && $1==d {f=1} END {exit !f}' /proc/swaps && a_swap=true;;
+   makhzan-nas)
+    l_nas=$p_size
+    if [ -n "$l_root" ] && awk -v d="$p_dev" -v m="$l_root" '$1==d && $2==m {f=1} END {exit !f}' /proc/mounts; then a_nas=true; fi;;
+  esac
+ done
+ printf '{"extroot":%s,"swap":%s,"nas":%s,"active":{"extroot":%s,"swap":%s,"nas":%s}}' "$l_ext" "$l_swap" "$l_nas" "$a_ext" "$a_swap" "$a_nas"
+}
 devices() {
  printf '{"ok":true,"devices":['; sep=''
  for sys in /sys/block/sd*; do
@@ -45,7 +67,7 @@ devices() {
   sectors=$(cat "$sys/size"); model=$(cat "$sys/device/model" 2>/dev/null | tr -cd 'A-Za-z0-9 ._-' | sed 's/ *$//')
   mounts=$(disk_mounts "$dev" | awk '{printf "%s\"%s\"", (n++?",":""), $2}'); swaps=$(disk_swaps "$dev" | wc -l)
   system=false; disk_mounts "$dev" | awk '$2=="/" || $2=="/overlay" || $2=="/rom/overlay" {f=1} END {exit !f}' && system=true
-  printf '%s{"path":"%s","model":"%s","size_mib":%s,"mounts":[%s],"swap_active":%s,"system":%s}' "$sep" "$dev" "$model" "$((sectors / 2048))" "$mounts" "$([ "$swaps" -gt 0 ] && echo true || echo false)" "$system"; sep=,
+  printf '%s{"path":"%s","model":"%s","size_mib":%s,"mounts":[%s],"swap_active":%s,"system":%s,"layout":%s}' "$sep" "$dev" "$model" "$((sectors / 2048))" "$mounts" "$([ "$swaps" -gt 0 ] && echo true || echo false)" "$system" "$(layout "$dev")"; sep=,
  done
  printf ']}\n'
 }
@@ -131,7 +153,9 @@ run() {
  step formatting
  for part in "$ep" "$sp" "$np"; do [ -z "$part" ] || detach "$part" || error 'A new partition was auto-mounted and could not be released'; done
  [ -z "$ep" ] || mkfs.ext4 -q -F -L makhzan-extroot "$ep" >/dev/null 2>&1 || error 'Extroot formatting failed'
- [ -z "$np" ] || mkfs.ext4 -q -F -L makhzan-nas "$np" >/dev/null 2>&1 || error 'NAS formatting failed'
+ # A NAS partition holds only user data: no root-reserved blocks (ext4 would hide 5% by default).
+ # Extroot keeps the default reserve because it is the router's system storage.
+ [ -z "$np" ] || mkfs.ext4 -q -F -m 0 -L makhzan-nas "$np" >/dev/null 2>&1 || error 'NAS formatting failed'
  [ -z "$sp" ] || mkswap -L makhzan-swap "$sp" >/dev/null 2>&1 || error 'Swap formatting failed'
  eu=''; su=''; nu=''
  if [ -n "$ep" ]; then eu=$(uuid "$ep"); [ -n "$eu" ] || error 'Extroot UUID missing'; fi

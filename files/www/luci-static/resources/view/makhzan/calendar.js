@@ -29,5 +29,14 @@ function toEpoch(date, time) {
 }
 function dateInput(epoch) { return parts(epoch, 'Asia/Tehran').map(function(n, i) { return i ? String(n).padStart(2, '0') : String(n); }).join('/'); }
 function timeInput(epoch) { return new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Tehran', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(epoch * 1000)); }
-function display(epoch, fa) { return new Intl.DateTimeFormat(fa ? 'fa-IR-u-ca-persian' : 'en-u-ca-persian', { timeZone: 'Asia/Tehran', dateStyle: 'full', timeStyle: 'short' }).format(new Date(epoch * 1000)); }
+// Built from parts: browsers order the Persian full date as "year month day, weekday". Read from the
+// right it must be weekday, day, month, year, then the time.
+function display(epoch, fa) {
+	var p = {};
+	new Intl.DateTimeFormat(fa ? 'fa-IR-u-ca-persian' : 'en-u-ca-persian', { timeZone: 'Asia/Tehran', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+		.formatToParts(new Date(epoch * 1000)).forEach(function(x) { p[x.type] = x.value; });
+	return fa ? p.weekday + ' ' + p.day + ' ' + p.month + ' ' + p.year + '، ساعت ' + p.hour + ':' + p.minute
+		: p.weekday + ', ' + p.day + ' ' + p.month + ' ' + p.year + ', ' + p.hour + ':' + p.minute;
+}
+// LuCI modules must yield a class; LuCI instantiates it once and hands the instance to 'require ... as'.
 return baseclass.extend({ digits: digits, toEpoch: toEpoch, dateInput: dateInput, timeInput: timeInput, display: display });

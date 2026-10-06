@@ -2,13 +2,13 @@
 
 ## مخزن @TAG@ — فایل‌سرور خانگی برای OpenWrt
 
-این انتشار بر مبنای نسخهٔ محلی پروژه است و README فارسی و انگلیسی را با همان رابط هماهنگ می‌کند: مدیریت دانلود در برگهٔ مستقل، صف پشت‌سرهم یا تا ۳ فایل همزمان، زمان‌بندی شمسی، بررسی فضای USB، توقف و ادامه، حذف و تغییر نام، جستجو، سقف سرعت، اتصال مجدد و لینک‌های رمزدار. ماژول تقویم با قالب موردنیاز LuCI و نام وابسته به نسخه بسته‌بندی می‌شود.
+نسخه ۲ **مدیر دانلود** را به مخزن اضافه می‌کند: دانلود مستقیم روی دیسک USB با چند اتصال همزمان برای هر فایل، دکمه «دانلود» برای شروع فوری، صف تا ۶ فایل همزمان، زمان‌بندی با تقویم شمسی، دانلود در ساعت‌های دلخواه، سقف سرعت کلی و جداگانه، بررسی کد فایل (SHA-256 یا MD5)، ادامه بعد از قطعی و پشتیبانی از لینک‌های دارای رمز، Referer و Cookie.
 
-این نسخه عین رابط 2.0.0 نیست؛ امکانات قابل استفاده از رابط را در README همین نسخه ببینید. سقف انتخاب دانلود همزمان در رابط این انتشار ۳ فایل است.
+همچنین بخش تقسیم دیسک حالا طرح فعلی دیسک را نشان می‌دهد و اجازه نمی‌دهد جمع سهم‌ها از حجم دیسک بیشتر شود؛ فایل‌سرور تمام فضای اختصاص‌یافته را بدون رزرو ۵٪ در اختیار می‌گذارد؛ و رابط کاربری در موبایل و در حالت روشن و تیره بهتر شده است.
 
-> **برای ارتقا، نسخهٔ جدید را روی قبلی نصب کنید و اول حذف نکنید**.
+> **برای ارتقا، نسخه جدید را روی قبلی نصب کنید و اول حذف نکنید**.
 
-یک بسته برای **همهٔ معماری‌ها**: مخزن کد کامپایل‌شده ندارد، پس همین فایل‌ها روی همهٔ روترها نصب می‌شوند.
+یک بسته برای **همه معماری‌ها**: مخزن کد کامپایل‌شده ندارد، پس همین فایل‌ها روی همه روترها نصب می‌شوند.
 
 | پردازنده | OpenWrt 25.12 و جدیدتر | OpenWrt 24.10 و قدیمی‌تر |
 |---|---|---|
@@ -43,9 +43,9 @@ opkg install /tmp/@IPK@
 
 ## Makhzan @TAG@ — home NAS for OpenWrt
 
-This release follows the local project revision and aligns the Persian and English README with its interface: a dedicated download manager, sequential or up to three concurrent files, Persian scheduling, USB space checks, pause/resume, delete/rename, search, bandwidth limits, retries and authenticated links. The calendar is packaged as a LuCI class under a versioned module name.
+Version 2 adds a **download manager**: downloads go straight to the USB disk with several connections per file, a Download button that starts at once, a queue of up to six files at a time, Persian-calendar scheduling, download hours, total and per-download speed limits, checksum verification (SHA-256 or MD5), resume after disconnects, and links that need a password, Referer or Cookie.
 
-This is not the same interface as 2.0.0. Refer to this version's README for exposed controls; its UI supports up to three concurrent files.
+The disk planner now shows the disk's current layout and never lets the roles add up to more than the disk; the file server gets all of its space (no 5% root reserve); and the interface works better on phones and in light and dark mode.
 
 > **To upgrade, install the new version over the existing one; do not uninstall first.**
 

@@ -70,7 +70,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_header('Content-Length', str(last - first + 1))
         self.send_header('Accept-Ranges', 'bytes')
         if spec:
-            self.send_header('Content-Range', f'bytes {first}-{last}/{size}')
+            total = '*' if self.path.startswith('/unknown') else size
+            self.send_header('Content-Range', f'bytes {first}-{last}/{total}')
         self.send_header('ETag', '"fixture-v1"')
         self.send_header('Last-Modified', 'Mon, 05 Oct 2026 00:00:00 GMT')
         self.end_headers()
@@ -102,7 +103,7 @@ def main():
         def relay():
             local = socket.create_connection(server.server_address)
             try:
-                while True:
+                while not channel.closed:
                     readable, _, _ = select.select([local, channel], [], [], 10)
                     if local in readable:
                         b = local.recv(65536)
@@ -114,7 +115,14 @@ def main():
                         if not b:
                             break
                         local.sendall(b)
+            except (OSError, EOFError, paramiko.SSHException):
+                pass  # curl on the router hung up (pause, cancel, dropped-connection tests)
             finally:
+                # Dropbear ends the whole SSH session on an EOF for a channel it has already
+                # released ("EOF for unknown channel"). Once the router closed its side, reply
+                # with CLOSE only.
+                if channel.eof_received or channel.closed:
+                    channel.eof_sent = True
                 channel.close()
                 local.close()
         threading.Thread(target=relay, daemon=True).start()
@@ -133,22 +141,46 @@ def main():
         return value.strip()
 
     def api(*args, fail=False):
-        _, out, err = client.exec_command(shlex.join(['/usr/sbin/makhzanctl', *map(str, args)]), timeout=40)
-        value = out.read().decode()
-        errors = err.read().decode()
-        rc = out.channel.recv_exit_status()
-        if not value:
-            raise RuntimeError(f'{args[0]} returned no JSON ({rc}): {errors}')
-        result = json.loads(value)
+        # Someone using the LuCI page at the same time briefly holds the control lock; wait for it.
+        for _ in range(20):
+            _, out, err = client.exec_command(shlex.join(['/usr/sbin/makhzanctl', *map(str, args)]), timeout=40)
+            value = out.read().decode()
+            errors = err.read().decode()
+            rc = out.channel.recv_exit_status()
+            if not value:
+                raise RuntimeError(f'{args[0]} returned no JSON ({rc}): {errors}')
+            result = json.loads(value)
+            if result.get('error') != 'Another operation is running; wait until it completes':
+                break
+            time.sleep(1)
         if not fail and result.get('ok') is False:
             raise RuntimeError(f'{args[0]}: {result}')
         return result
 
-    def add(path, size_name='fixture.bin', start=0, auth=''):
+    def add(path, size_name='fixture.bin', start=0, auth='', segments=1, rate=0, checksum=''):
         id_ = uuid.uuid4().hex
         ids.append(id_)
-        result = api('download-add', id_, base + path, size_name, start, 0, auth, fail=True)
+        result = api('download-add', id_, base + path, size_name, start, 0, auth, segments, rate, checksum, fail=True)
         return id_, result
+
+    def job(id_):
+        return next(j for j in api('download-list')['jobs'] if j['id'] == id_)
+
+    def secret(**fields):
+        token = uuid.uuid4().hex
+        payload = {'path': '/tmp/run/makhzan/secret.' + token, 'data': json.dumps(fields), 'mode': 384}
+        shell(shlex.join(['ubus', 'call', 'file', 'write', json.dumps(payload)]))
+        return token
+
+    def sha_of(size):
+        digest = hashlib.sha256()
+        for off in range(0, size, 65536):
+            digest.update(pattern(off, min(65536, size - off)))
+        return digest.hexdigest()
+
+    def minutes_now():
+        h, m = shell("date +%H:%M").split(':')
+        return int(h) * 60 + int(m)
 
     def wait(id_, states, timeout=45):
         end = time.monotonic() + timeout
@@ -245,10 +277,172 @@ def main():
         assert wait(scheduled, {'queued'})['start'] == now + 3600
         api('download-remove', scheduled)
         print('PASS future scheduling, service restart persistence and queued deletion', flush=True)
+
+        # ---- version 2.0.0 features
+        api('download-limit', 0)
+        assert api('download-list')['limit'] == 0
+        assert api('download-limit', -1, fail=True)['ok'] is False
+        unlimited, _ = add('/large?unlimited')
+        assert wait(unlimited, {'completed'})['bytes'] == 2 * 1024 * 1024
+        api('download-remove', unlimited)
+        print('PASS removing the total bandwidth limit (unlimited transfers)', flush=True)
+
+        # "Download now": runs with the manager off, past a busy queue slot and outside download hours.
+        api('download-limit', 256)
+        api('download-parallel', 1)
+        api('download-enabled', 1)
+        busy, _ = add('/large?busy')
+        wait(busy, {'downloading'})
+        api('download-enabled', 0)
+        minutes = minutes_now()
+        api('download-window', 1, (minutes + 120) % 1440, (minutes + 180) % 1440)
+        now_id = uuid.uuid4().hex
+        ids.append(now_id)
+        assert api('download-add', now_id, base + '/small?now', 'now.bin', 0, 0, '', 1, 0, '', 1)['ok']
+        done = wait(now_id, {'completed'})
+        assert done['immediate'] is False and done['bytes'] == 65536, done
+        assert api('download-add', uuid.uuid4().hex, base + '/small?x', 'x.bin', 0, 0, '', 1, 0, '', 2, fail=True)['ok'] is False
+        api('download-window', 0)
+        for id_ in (busy, now_id):
+            api('download-remove', id_)
+        for n in (4, 6):
+            api('download-parallel', n)
+            assert api('download-list')['parallel'] == n
+        assert api('download-parallel', 7, fail=True)['ok'] is False
+        api('download-parallel', 1)
+        api('download-limit', 8192)
+        api('download-enabled', 1)
+        print('PASS download now (manager off, queue busy, outside hours) and up to 6 simultaneous files', flush=True)
+
+        api('download-segments', 4)
+        api('download-limit', 1024)
+        api('download-parallel', 1)
+        seg, result = add('/seg', segments=4)
+        assert result['ok'], result
+        assert job(seg)['segments'] == 4
+        wait(seg, {'downloading'})
+        time.sleep(3)
+        api('download-pause', seg)
+        paused = wait(seg, {'paused'})
+        assert paused['bytes'] > 0
+        time.sleep(1)
+        api('download-resume', seg)
+        done = wait(seg, {'completed'}, timeout=120)
+        assert done['bytes'] == done['expected'] == 8 * 1024 * 1024
+        root = json.loads(shell('/usr/sbin/makhzanctl status'))['disk']['root']
+        actual = shell(shlex.join(['sha256sum', root + '/.makhzan-downloads/completed/' + seg + '-fixture.bin'])).split()[0]
+        assert actual == sha_of(8 * 1024 * 1024), 'segmented file differs from the source'
+        offsets = {o for m, p, o in requests if p == '/seg' and m == 'GET'}
+        assert len({o // (2 * 1024 * 1024) for o in offsets}) == 4, offsets
+        assert done['category'] == 'program'
+        api('download-remove', seg)
+        wait(seg, {'absent'})
+        print('PASS segmented download (4 connections), pause/resume, joined file hash and category', flush=True)
+
+        api('download-limit', 4096)
+        good, result = add('/small?sum', checksum=sha_of(65536))
+        assert result['ok'], result
+        wait(good, {'completed'})
+        md5, result = add('/small?md5', checksum=hashlib.md5(pattern(0, 65536)).hexdigest())
+        assert result['ok'], result
+        wait(md5, {'completed'})
+        bad, result = add('/small?bad', checksum='0' * 64)
+        assert result['ok'], result
+        failed = wait(bad, {'failed'})
+        assert failed['error'] == 'Checksum mismatch', failed
+        refused = api('download-add', uuid.uuid4().hex, base + '/small?x', 'x.bin', 0, 0, '', 1, 0, 'not-a-hash', fail=True)
+        assert refused['ok'] is False
+        for id_ in (good, md5, bad):
+            api('download-remove', id_)
+        print('PASS SHA-256 and MD5 verification, mismatch handling and invalid checksum refusal', flush=True)
+
+        api('download-enabled', 0)
+        first_, _ = add('/small?o1')
+        second_, _ = add('/small?o2')
+        third_, _ = add('/small?o3')
+        duplicate = api('download-add', uuid.uuid4().hex, base + '/small?o1', 'dup.bin', 0, 0, '', 1, 0, '', fail=True)
+        assert duplicate['ok'] is False and 'already' in duplicate['error'], duplicate
+
+        def order():
+            return [j['id'] for j in sorted(api('download-list')['jobs'], key=lambda j: j['order']) if j['id'] in (first_, second_, third_)]
+        assert order() == [first_, second_, third_]
+        api('download-move', third_, 'top')
+        assert order() == [third_, first_, second_], order()
+        api('download-move', third_, 'down')
+        assert order() == [first_, third_, second_], order()
+        api('download-move', first_, 'bottom')
+        assert order() == [third_, second_, first_], order()
+        api('download-move', first_, 'up')
+        assert order() == [third_, first_, second_], order()
+        api('download-cancel', second_)
+        assert job(second_)['state'] == 'cancelled'
+        api('download-clear-finished')
+        wait(second_, {'absent'})
+        for id_ in (first_, third_):
+            api('download-remove', id_)
+        print('PASS duplicate-link refusal, queue reordering (top/up/down/bottom) and clearing cancelled items', flush=True)
+
+        api('download-enabled', 1)
+        token = secret(referer='http://example.org/ref', agent='MakhzanTest/2.0', cookie='sid=abc123')
+        hdr, result = add('/hdr', auth=token)
+        assert result['ok'], result
+        wait(hdr, {'completed'})
+        headers = [h for path, h in seen_headers if path == '/hdr' and 'Cookie' in h]
+        assert headers and headers[-1]['Referer'] == 'http://example.org/ref' and headers[-1]['User-Agent'] == 'MakhzanTest/2.0' and headers[-1]['Cookie'] == 'sid=abc123', seen_headers[-3:]
+        mode = shell('ls -l ' + shlex.join([root + '/.makhzan-downloads/jobs/' + hdr + '/auth.conf']))
+        assert mode.startswith('-rw-------'), mode
+        api('download-remove', hdr)
+        print('PASS custom Referer, User-Agent and Cookie sent over private per-job configuration', flush=True)
+
+        api('download-limit', 8192)
+        slow, _ = add('/large?slow', rate=64)
+        wait(slow, {'downloading'})
+        time.sleep(4)
+        live = job(slow)
+        assert 0 < live['speed'] <= 120 * 1024, live
+        assert live['rate'] == 64
+        api('download-pause', slow)
+        wait(slow, {'paused'})
+        api('download-relink', slow, base + '/large?moved')
+        api('download-rate', slow, 0)
+        api('download-resume', slow)
+        done = wait(slow, {'completed'}, timeout=60)
+        assert done['bytes'] == done['expected']
+        assert any(p == '/large?moved' and o > 0 for m, p, o in requests), 'relinked download did not resume by byte range'
+        before_requests = len(requests)
+        api('download-redownload', slow)
+        wait(slow, {'completed'}, timeout=60)
+        assert len(requests) > before_requests
+        api('download-remove', slow)
+        print('PASS per-download speed limit, link refresh with resume, and re-download', flush=True)
+
+        minutes = minutes_now()
+        api('download-window', 1, (minutes + 120) % 1440, (minutes + 180) % 1440)
+        assert not api('download-list')['in_window']
+        outside, _ = add('/small?window')
+        time.sleep(6)
+        assert wait(outside, {'queued'})['bytes'] == 0
+        api('download-window', 1, (minutes - 5) % 1440, (minutes + 120) % 1440)
+        assert api('download-list')['in_window']
+        wait(outside, {'completed'})
+        api('download-window', 0)
+        api('download-remove', outside)
+        later, _ = add('/small?startnow', start=api('download-clock')['now'] + 7200)
+        time.sleep(4)
+        assert wait(later, {'queued'})['bytes'] == 0
+        api('download-start-now', later)
+        wait(later, {'completed'})
+        api('download-remove', later)
+        print('PASS download time window (outside blocks, inside runs) and start-now over a schedule', flush=True)
     finally:
         for id_ in ids:
             api('download-remove', id_, fail=True)
         time.sleep(3)
+        # Restore the saved hours too, not only the on/off switch.
+        api('download-window', 1, before['window_start'], before['window_end'])
+        if not before['window']:
+            api('download-window', 0)
+        api('download-segments', before['segments'])
         api('download-enabled', before['enabled'])
         api('download-parallel', before['parallel'])
         api('download-limit', before['limit'])
