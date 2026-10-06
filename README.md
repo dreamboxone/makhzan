@@ -11,6 +11,8 @@
 
 **فایل‌سرور خانگی (NAS) روی روتر OpenWrt** — یک فلش مموری یا هارد USB را به روتر وصل کنید و از ویندوز، اندروید، آیفون، مک، لینوکس و تلویزیون به فایل‌هایتان دسترسی داشته باشید.
 
+این راهنما مطابق سورس همین شاخه با نسخهٔ بستهٔ **2.0.1-r1** است. برای نصب همین نسخه، فایل‌های [ریلیز 2.0.1](https://github.com/dreamboxone/makhzan/releases/tag/v2.0.1) را بگیرید یا بخش [ساخت بسته از سورس](#ساخت-بسته-از-سورس) را ببینید.
+
 Copyright © 2026 dreamboxone — منتشرشده با مجوز **GNU GPL نسخهٔ ۳** — بدون هیچ ضمانتی. ([English version below](#makhzan-english))
 
 ---
@@ -26,11 +28,12 @@ Copyright © 2026 dreamboxone — منتشرشده با مجوز **GNU GPL نس�
 7. [اتصال از دستگاه‌ها](#اتصال-از-دستگاهها) (ویندوز، اندروید با CX File Explorer، آیفون، تلویزیون)
 8. [دسترسی از بیرون خانه (WireGuard)](#دسترسی-از-بیرون-خانه-wireguard)
 9. [کتابخانهٔ رسانه (هارد NTFS یا exFAT موجود)](#کتابخانهٔ-رسانه-هارد-ntfs-یا-exfat-موجود)
-10. [Time Machine، کاربر فقط‌خواندنی و نگه‌داری دیسک](#time-machine-کاربر-فقطخواندنی-و-نگهداری-دیسک)
-11. [امنیت](#امنیت)
-12. [محدودیت‌ها](#محدودیتها)
-13. [ساخت بسته از سورس](#ساخت-بسته-از-سورس)
-14. [مجوز](#مجوز)
+10. [مدیریت دانلود](#مدیریت-دانلود)
+11. [Time Machine، کاربر فقط‌خواندنی و نگه‌داری دیسک](#time-machine-کاربر-فقطخواندنی-و-نگهداری-دیسک)
+12. [امنیت](#امنیت)
+13. [محدودیت‌ها](#محدودیتها)
+14. [ساخت بسته از سورس](#ساخت-بسته-از-سورس)
+15. [مجوز](#مجوز)
 
 ---
 
@@ -49,6 +52,8 @@ Copyright © 2026 dreamboxone — منتشرشده با مجوز **GNU GPL نس�
 - **دسترسی از بیرون خانه با WireGuard:** هر کاربر یک QR کد می‌گیرد و از هر جای دنیا به‌صورت رمزنگاری‌شده به فایل‌هایش دسترسی دارد. از راه تونل فقط فایل‌سرور در دسترس است.
 - **کتابخانهٔ رسانه:** هارد یا فلش NTFS، exFAT یا FAT که از قبل فیلم و موسیقی دارد، **بدون پاک‌کردن** و فقط‌خواندنی در اشتراک Library و روی تلویزیون دیده می‌شود.
 - **Time Machine** برای پشتیبان‌گیری خودکار مک در پوشهٔ خصوصی هر کاربر.
+- **مدیریت دانلود در برگهٔ مستقل:** لینک مستقیم HTTP/HTTPS، صف پشت‌سرهم یا ۲ تا ۳ فایل همزمان، زمان‌بندی شمسی، توقف و ادامه، جستجو، حذف و تغییر نام فایل کامل.
+- **کنترل دانلود:** سقف پهنای باند، تلاش مجدد پس از قطعی، ورود نام کاربری و رمز، نمایش حجم، درصد، سرعت و زمان‌ها؛ ذخیرهٔ فایل‌ها و صف روی USB.
 - **کاربر فقط‌خواندنی** (مثلاً برای بچه‌ها): Shared و Media را می‌بیند ولی تغییر نمی‌دهد.
 - **نگه‌داری دیسک:** بررسی و تعمیر فایل‌سیستم از داخل صفحه، و خاموش شدن خودکار هارد مکانیکی در بیکاری.
 - **نمودار مصرف فضا** (هر کاربر، Shared، Media، سطل) و **هشدار پر شدن دیسک** در ۹۰٪ و ۹۷٪.
@@ -65,7 +70,7 @@ Copyright © 2026 dreamboxone — منتشرشده با مجوز **GNU GPL نس�
 | درگاه USB | روتر باید پورت USB و درایور `kmod-usb-storage` داشته باشد. |
 | فایل‌سیستم | `kmod-fs-ext4` (برای دیسکی که مخزن آماده می‌کند لازم است). |
 
-بسته‌های زیر **خودکار** همراه مخزن نصب می‌شوند: `luci-base`, `rpcd`, `rpcd-mod-file`, `block-mount`, `e2fsprogs`, `parted`, `swap-utils`.
+بسته‌های زیر **خودکار** همراه مخزن نصب می‌شوند: `luci-base`, `rpcd`, `rpcd-mod-file`, `block-mount`, `e2fsprogs`, `parted`, `swap-utils`, `curl`, `ca-bundle`, `jshn`. نصب خودکار وابستگی‌ها به دسترسی روتر به مخزن بسته‌های سازگار با همان نسخهٔ OpenWrt نیاز دارد.
 
 بسته‌های **اختیاری** (برای قابلیت کامل):
 
@@ -117,11 +122,11 @@ opkg install /tmp/luci-app-makhzan_*_all.ipk
 
 ### ۲ (روش دیگر). نصب از داخل LuCI
 
-منوی **System ← Software** را باز کنید، روی **Upload Package** بزنید، فایل را انتخاب و نصب کنید. قبل از آن بسته‌های `samba4-server` و `kmod-usb-storage` را از همان صفحه نصب کنید.
+منوی <b dir="ltr">System → Software</b> را باز کنید، روی **Upload Package** بزنید، فایل را انتخاب و نصب کنید. قبل از آن بسته‌های `samba4-server`، `kmod-usb-storage` و `kmod-fs-ext4` را از همان صفحه نصب کنید.
 
 ### ۳. باز کردن برنامه
 
-صفحهٔ LuCI را یک بار تازه کنید و به منوی **Services ← Makhzan** بروید.
+صفحهٔ LuCI را یک بار تازه کنید و به منوی <b dir="ltr">Services → Makhzan</b> بروید.
 
 > **بعد از نصب یا ارتقا:** یک بار از LuCI خارج شوید (Log out) و دوباره وارد شوید تا مجوزهای جدید اعمال شود. هنگام ارتقا از نسخهٔ 1.0.0 صفحه را یک بار هم با `Ctrl+F5` تازه کنید.
 
@@ -138,7 +143,7 @@ opkg remove luci-app-makhzan    # OpenWrt 24.10 and older
 
 </div>
 
-یا از **System ← Software** روی **Remove** بزنید.
+یا از <b dir="ltr">System → Software</b> روی **Remove** بزنید.
 
 از نسخهٔ **1.2.0-r5**، هنگام حذف مخزن به‌طور خودکار:
 
@@ -220,7 +225,7 @@ opkg remove luci-app-makhzan    # OpenWrt 24.10 and older
 با این قابلیت، کاربران از بیرون خانه (اینترنت همراه، محل کار، سفر) به‌صورت **رمزنگاری‌شده** به فایل‌هایشان وصل می‌شوند. هر کاربر یک **QR کد** مخصوص خودش می‌گیرد.
 
 **پیش‌نیازها:**
-- بسته‌های `kmod-wireguard` و `wireguard-tools` (از **System ← Software**).
+- بسته‌های `kmod-wireguard` و `wireguard-tools` (از <b dir="ltr">System → Software</b>).
 - روتر باید از اینترنت قابل دسترس باشد: **IP عمومی** یا یک نام **DDNS**. اگر روتر پشت مودم دیگری است (آدرس WAN آن مثل `192.168.x.x` است)، در مودم اصلی پورت **UDP 51820** را به آدرس WAN روتر **فوروارد** کنید.
 - اگر اینترنت شما IP عمومی ندارد (**CGNAT**)، این قابلیت کار نمی‌کند.
 
@@ -243,9 +248,48 @@ opkg remove luci-app-makhzan    # OpenWrt 24.10 and older
 
 محتوای آن **فقط‌خواندنی** در اشتراک **Library** (برای همهٔ کاربران مخزن) و در **DLNA** تلویزیون دیده می‌شود و فایل‌های روی آن تغییر نمی‌کنند. پوشهٔ خصوصی روی این دیسک ساخته نمی‌شود.
 
+## مدیریت دانلود
+
+همهٔ کنترل‌های این بخش در برگهٔ **مدیریت دانلود** هستند. برای دانلود، ابتدا یک حافظهٔ USB به‌عنوان NAS آماده کنید؛ روشن‌بودن کامپیوتر یا بازماندن مرورگر لازم نیست. SMB برای خود دانلود لازم نیست، ولی برای بازکردن فایل‌های کامل از شبکه باید آن را فعال کنید.
+
+### شروع و زمان‌بندی
+
+1. کلید **روشن؛ اجرای خودکار و ادامهٔ صف پس از روشن‌شدن روتر** را فعال کنید. خاموش‌کردن این کلید انتقال‌ها را متوقف می‌کند و صف را نگه می‌دارد. کارهایی که دستی متوقف شده‌اند، با **ادامه** یا **ادامهٔ همه** اجرا می‌شوند.
+2. در کارت **ساعت و تقویم روتر**، **تنظیم ساعت روتر روی تهران** را بزنید. اگر از قبل تنظیم باشد، پیام آن کنار دکمه دیده می‌شود. **همگام‌سازی ساعت اینترنتی** جداگانه است؛ تغییر منطقهٔ زمانی به‌تنهایی ساعت اشتباه را تصحیح نمی‌کند.
+3. لینک مستقیم و نام فایل را وارد کنید. برای شروع در آینده، گزینهٔ زمان‌بندی را روشن کنید و تاریخ شمسی به شکل `1405/07/15` و ساعت تهران، مثلاً `23:30`، بدهید. روز هفته و تاریخ انتخابی در همان بخش نمایش داده می‌شود.
+4. **بررسی فضا و افزودن به صف** را بزنید. حجم فایل و فضای لازم برای فایل‌های صف پیش از پذیرش و دوباره پیش از انتقال بررسی می‌شود. اگر فضا کافی نباشد، خطا همان‌جا نمایش داده می‌شود. لینک بدون حجم قابل‌تشخیص پذیرفته نمی‌شود.
+5. در **نحوهٔ اجرا**، یک فایل پشت‌سرهم یا ۲ یا ۳ فایل همزمان را انتخاب کنید. صف روی USB می‌ماند. پس از روشن‌شدن روتر، کارهای زمان‌دار تا همگام‌شدن ساعت منتظر می‌مانند؛ دانلود فوری به نوبت صف اجرا می‌شود.
+
+### کنترل صف و فایل‌ها
+
+| گزینه | رفتار |
+|---|---|
+| توقف / ادامه | توقف موقت یک فایل و ادامهٔ آن؛ Resume به پشتیبانی سرور از Range و شناسهٔ معتبر فایل وابسته است. |
+| توقف همه / ادامهٔ همه | توقف فایل‌های فعال و داخل صف، یا ادامهٔ فایل‌های متوقف‌شده. |
+| حذف فایل | حذف دائمی کار و فایل نیمه‌کاره یا کامل آن؛ هنگام دانلود ابتدا انتقال متوقف می‌شود. این حذف وارد سطل بازیابی نمی‌شود. |
+| تغییر نام | فقط برای فایل دانلودشدهٔ کامل. |
+| جستجو و فیلتر | جستجو بر اساس نام، با فیلتر همه، دانلودشده‌ها یا فعال و در صف. |
+| وضعیت انتقال | حجم دریافت‌شده و کل، درصد، سرعت، زمان سپری‌شده و زمان باقی‌ماندهٔ تخمینی. |
+
+سرعت تا کمتر از `1024 KB/s` بر حسب کیلوبایت و از آن مقدار به بالا بر حسب `MB/s` نمایش داده می‌شود. زمان سپری‌شده، زمان انتقال را می‌شمارد؛ انتظار در صف و توقف دستی در آن نیست. وقتی سرعت مشخص نباشد، زمان باقی‌مانده به‌صورت «—» نمایش داده می‌شود.
+
+### سرعت، اتصال مجدد و لینک رمزدار
+
+- **سقف مجموع پهنای باند:** از ۱ تا ۶۵۵۳۶ کیلوبایت بر ثانیه؛ مقدار پیش‌فرض ۸۱۹۲ است. سهم انتقال‌ها بر اساس تعداد همزمان انتخاب‌شده تقسیم می‌شود. تغییر سقف برای انتقال‌های تازه یا ادامه‌داده‌شده اعمال می‌شود؛ برای کارهای فعال از **توقف همه** و سپس **ادامهٔ همه** استفاده کنید.
+- **Redial:** تلاش مجدد اتصال دانلود، با فاصلهٔ ۱ تا ۳۶۰۰ ثانیه؛ پیش‌فرض ۶۰ ثانیه و حداکثر ۵ تلاش. پس از آن می‌توانید دستی دوباره تلاش کنید. این گزینه تنظیمات WAN روتر را تغییر نمی‌دهد. کمبود فضا، خطای ورود و نبود فایل با تکرار اتصال رفع نمی‌شوند.
+- **نام کاربری و رمز:** گزینهٔ مربوط را روشن کنید و اطلاعات HTTP Basic یا Digest را وارد کنید. فرم ورود وب‌سایت پشتیبانی نمی‌شود. اطلاعات در پوشهٔ خصوصی مدیر روی USB نگهداری می‌شود؛ برای انتقال امن آن از HTTPS استفاده کنید.
+
+### محل فایل‌ها و خاموشی
+
+فایل‌های کامل در اشتراک فقط‌خواندنی **Downloads** برای کاربران مخزن قرار می‌گیرند، مثلاً <span dir="ltr">`\\192.168.1.1\Downloads`</span>. آدرس روتر خودتان را جایگزین کنید. فایل‌ها در مسیر `.makhzan-downloads/completed` روی NAS هستند؛ پوشهٔ `jobs` اطلاعات خصوصی صف و فایل‌های نیمه‌کاره را نگه می‌دارد. شناسه‌ای به ابتدای نام فایل ذخیره‌شده اضافه می‌شود تا نام‌های تکراری با هم تداخل نکنند.
+
+اگر **پس از پایان موفق دانلودها، سیستم روتر خاموش شود** را انتخاب کنید، خاموشی تا پایان صف و نبود کار آینده، متوقف یا خطادار منتظر می‌ماند. شمارش معکوس ۶۰ ثانیه‌ای دکمهٔ **لغو خاموشی** دارد. با خاموشی، اینترنت و Wi-Fi قطع می‌شوند؛ قطع کامل برق به سخت‌افزار بستگی دارد و روشن‌کردن دوباره معمولاً به قطع‌و‌وصل برق نیاز دارد.
+
+حداکثر ۱۰۰ مورد در صف و تاریخچه نگهداری می‌شود. فقط لینک مستقیم HTTP/HTTPS با حجم مشخص پشتیبانی می‌شود؛ FTP، تورنت و صفحه‌های دانلود چندمرحله‌ای پشتیبانی نمی‌شوند. اگر سرور Resume را پشتیبانی نکند یا فایل مبدأ تغییر کرده باشد، ممکن است دریافت از ابتدا انجام شود. فایل‌های دانلود روی USB نوشته می‌شوند و حافظهٔ داخلی جایگزین آن نیست. پیش از آزادسازی یا بررسی دیسک، دانلودهای فعال را متوقف کنید.
+
 ## Time Machine، کاربر فقط‌خواندنی و نگه‌داری دیسک
 
-- **Time Machine (مک):** در زبانهٔ **سرویس‌ها** کلید Time Machine را روشن کنید و در صورت نیاز سقف حجم هر کاربر (GB) را بدهید. در مک: **System Settings ← Time Machine ← Add Backup Disk** و پوشهٔ خصوصی خودتان را انتخاب کنید. پشتیبان هر مک در پوشهٔ خصوصی صاحبش می‌ماند.
+- **Time Machine (مک):** در زبانهٔ **سرویس‌ها** کلید Time Machine را روشن کنید و در صورت نیاز سقف حجم هر کاربر (GB) را بدهید. در مک: <b dir="ltr">System Settings → Time Machine → Add Backup Disk</b> و پوشهٔ خصوصی خودتان را انتخاب کنید. پشتیبان هر مک در پوشهٔ خصوصی صاحبش می‌ماند.
 - **کاربر فقط‌خواندنی:** هنگام ساخت کاربر گزینهٔ **فقط خواندنی** را بزنید یا بعداً دکمهٔ **فقط خواندنی** کنار کاربر را بزنید. این کاربر Shared و Media را فقط می‌بیند و نمی‌تواند چیزی را پاک یا عوض کند؛ پوشهٔ خصوصی خودش عادی است. برای بچه‌ها مناسب است.
 - **بررسی و تعمیر دیسک:** بعد از قطع ناگهانی برق یا جدا شدن USB بدون «آزادسازی»، در زبانهٔ **دیسک ← نگه‌داری دیسک** دکمهٔ **بررسی و تعمیر دیسک** را بزنید. اشتراک‌ها چند دقیقه قطع می‌شوند و نتیجه (سالم، تعمیرشده یا نیاز به تعویض دیسک) نمایش داده می‌شود.
 - **خاموش شدن خودکار هارد:** برای هارد مکانیکی، بستهٔ `hd-idle` را نصب کنید و مدت بیکاری را انتخاب کنید تا صدا، مصرف برق و فرسودگی کم شود. برای فلش لازم نیست.
@@ -290,7 +334,7 @@ opkg remove luci-app-makhzan    # OpenWrt 24.10 and older
 - نام کاربری فقط حروف کوچک انگلیسی، عدد، `_` و `-` (حداکثر ۳۱ نویسه). نام‌های `shared`، `media`، `homes`، `root` و `admin` رزرو شده‌اند.
 
 **پوشه‌ها و سطل بازیابی**
-- رابط وب فقط **پوشه‌های سطح اول** کاربر را مدیریت می‌کند؛ کار با فایل‌ها و زیرپوشه‌ها از طریق SMB انجام می‌شود.
+- فایل‌منیجر کاربران **پوشه‌های سطح اول** را مدیریت می‌کند؛ کار با فایل‌ها و زیرپوشه‌ها از طریق SMB انجام می‌شود. برگهٔ **مدیریت دانلود** جداگانه حذف فایل‌های دانلود و تغییر نام فایل کامل را فراهم می‌کند.
 - نام پوشه نمی‌تواند شامل `/ \ : * ? " < > |` باشد یا با نقطه/فاصله تمام شود (محدودیت ویندوز).
 - فایل‌هایی که کاربر از طریق SMB پاک می‌کند **به سطل نمی‌روند** و مستقیم حذف می‌شوند. سطل فقط برای حذف از طریق رابط مخزن است.
 - بازیابی، مورد را به پوشهٔ خصوصی صاحب اصلی برمی‌گرداند؛ اگر آن کاربر حذف شده باشد، ابتدا کاربری با همان نام بسازید.
@@ -350,6 +394,8 @@ Copyright © 2026 dreamboxone
 
 # Makhzan (English)
 
+This guide describes this checkout, package version **2.0.1-r1**. Use the [2.0.1 release assets](https://github.com/dreamboxone/makhzan/releases/tag/v2.0.1), or build this source with the instructions below for this exact version.
+
 **A home NAS for OpenWrt routers.** Plug a USB flash drive or hard disk into the router and reach your files from Windows, Android, iOS, macOS, Linux and TVs.
 
 Copyright © 2026 dreamboxone — licensed under the **GNU GPL version 3** — no warranty.
@@ -374,7 +420,7 @@ Copyright © 2026 dreamboxone — licensed under the **GNU GPL version 3** — n
 
 ## Compatibility
 
-Architecture independent (`PKGARCH:=all`): ARMv7, ARMv8/aarch64, ARMv9, x86-64 and MIPS. Use the `.apk` on OpenWrt 25.12+ and the `.ipk` on OpenWrt 24.10 and older. Required: a USB port with `kmod-usb-storage` and `kmod-fs-ext4`. Dependencies installed automatically: `luci-base rpcd rpcd-mod-file block-mount e2fsprogs parted swap-utils`. Optional: `samba4-server` (needed for file sharing), `minidlna` (TVs), `kmod-wireguard wireguard-tools` (remote access), `kmod-fs-ntfs3` / `kmod-fs-exfat` / `kmod-fs-vfat` (media library) and `hd-idle` (spin-down).
+Architecture independent (`PKGARCH:=all`): ARMv7, ARMv8/aarch64, ARMv9, x86-64 and MIPS. Use the `.apk` on OpenWrt 25.12+ and the `.ipk` on OpenWrt 24.10 and older. Required: a USB port with `kmod-usb-storage` and `kmod-fs-ext4`. Dependencies installed automatically: `luci-base rpcd rpcd-mod-file block-mount e2fsprogs parted swap-utils curl ca-bundle jshn`; the router needs access to compatible package repositories. Optional: `samba4-server` (needed for file sharing), `minidlna` (TVs), `kmod-wireguard wireguard-tools` (remote access), `kmod-fs-ntfs3` / `kmod-fs-exfat` / `kmod-fs-vfat` (media library) and `hd-idle` (spin-down).
 
 ## Install
 
@@ -475,6 +521,36 @@ Only the file server (SMB) is reachable through the tunnel; the router's admin p
 
 Install the filesystem driver (`kmod-fs-ntfs3`, `kmod-fs-exfat` or `kmod-fs-vfat`), plug the disk in, then **Disk** tab → **Media library** → **Use as library**. The disk is mounted **read-only**: its content appears as the `Library` share (for all Makhzan users) and in DLNA, and nothing on it is changed.
 
+## Download manager
+
+The **Download manager** tab saves downloads and their queue on the USB NAS. Prepare the NAS first. The browser and computer can be closed; SMB is needed only to access completed files over the network.
+
+1. Enable the manager for automatic queue processing after router startup. Disabling stops transfers and retains the queue; manually paused jobs require **Resume** or **Resume all**.
+2. Use **Set router timezone to Tehran**. If already configured, the adjacent message says so. **Sync with internet time** is separate; setting a timezone does not correct an inaccurate clock.
+3. Enter a direct link and filename. Optionally choose a Persian date such as `1405/07/15` and a Tehran time such as `23:30`; the selected weekday and date are previewed.
+4. Press **Check space and add to queue**. File size, remaining queued data and free USB space are checked before accepting the job and again before transfer. Insufficient space or an unknown file size produces an inline error.
+5. Choose sequential processing or **2 or 3 simultaneous files**. Scheduled jobs wait for clock synchronization after startup. Immediate jobs run when a queue slot is available.
+
+| Control | Behavior |
+|---|---|
+| Pause / Resume | Stop and resume one file. Byte-range resume requires server support and a valid file validator. |
+| Pause all / Resume all | Pause active and queued jobs, or resume paused jobs. |
+| Delete file | Permanently remove the job and its partial or completed file. Active transfers stop before deletion. This does not use recovery trash. |
+| Rename | Rename a completed file. |
+| Search and filter | Search filenames; show all, completed, or active and queued files. |
+| Transfer status | Downloaded and total size, percentage, speed, elapsed transfer time and estimated remaining time. |
+
+Speed is shown in KB/s below 1024 KB/s, then in MB/s. Elapsed time excludes queue waits and manual pauses; remaining time is an estimate and is unavailable while speed is unknown.
+
+- **Bandwidth:** 1–65536 KB/s, default 8192. The total setting is divided by the selected concurrency. Changes apply to new or resumed transfers; pause and resume active jobs to apply them.
+- **Redial:** retry a failed download connection at an interval of 1–3600 seconds, default 60, for up to five attempts. Manual retry remains available afterwards. This does not change the router's WAN settings.
+- **Credentials:** HTTP Basic or Digest username/password, kept in a private administrator directory on USB. Use HTTPS. Website login forms are not supported.
+- **Shutdown:** optional after successful queue completion, with no future, paused or failed jobs remaining. A 60-second countdown can be cancelled. Internet and Wi-Fi stop; physical power removal depends on hardware, and restarting usually requires a power cycle.
+
+Completed files appear in the read-only **Downloads** SMB share, for example `\\192.168.1.1\Downloads`. Replace the address with your router's. The on-disk directory is `.makhzan-downloads/completed`; private job metadata and partial files stay under `.makhzan-downloads/jobs`. Stored filenames have a unique ID prefix to prevent collisions.
+
+The queue/history holds up to 100 items. Direct HTTP/HTTPS links must report a size; FTP, torrents and click-through download pages are not supported. A changed source or missing range/validator support may require restarting a partial download. Download data stays on USB, without internal-storage fallback. Pause active downloads before releasing or checking the disk.
+
 ## Time Machine, read-only users and disk maintenance
 
 - **Time Machine:** turn it on in the **Services** tab (optionally with a per-user size limit in GB). On the Mac: **System Settings → Time Machine → Add Backup Disk** and choose your own private folder.
@@ -491,7 +567,7 @@ Install the filesystem driver (`kmod-fs-ntfs3`, `kmod-fs-exfat` or `kmod-fs-vfat
 - Makhzan appends four settings to `/etc/samba/smb.conf.template`: tdbsam (lockout), access-based share enumeration, unix extensions off, and `map to guest = Never` (unknown accounts are rejected instead of becoming guests, so Windows shows its password prompt). They also affect other Samba shares on the router; guest (passwordless) shares stop working. Removal takes all of them out except tdbsam, so passwords are not lost. The lockout policy lives in RAM and is re-applied at every boot (not active during the first seconds of boot) and relies on a correct router clock. Lockout applies to SMB only.
 - SMB2/SMB3 only; direct access from the LAN only. Use **Remote access (WireGuard)** from outside; never expose SMB to the internet.
 - Usernames: lowercase a-z, 0-9, `_`, `-` (max 31); `shared`, `media`, `homes`, `root`, `admin` are reserved. Folder names cannot contain `/ \ : * ? " < > |` or end with a dot/space.
-- The web UI manages top-level folders only; files are handled over SMB. Files deleted over SMB do not go to the recovery trash. Space usage is recalculated every five minutes.
+- The users' folder manager handles top-level folders; general file and subfolder operations use SMB. The separate Download manager supports deleting downloaded files and renaming completed files. Files deleted over SMB or from the Download manager do not go to recovery trash. Space usage is recalculated every five minutes.
 - DLNA has no authentication: anything in `Media` is visible to every device on the LAN. `Shared` and `Media` are writable by all Makhzan users except read-only users.
 - Performance depends on the router (typically 15-30 MB/s on USB 2.0). Always release the disk before unplugging it.
 - Use the router's proper power supply (Google WiFi: USB-C 5 V / 3 A, 15 W). A weak adapter (for example 1 A) combined with a USB disk causes sudden resets (typically during boot or when Wi-Fi clients connect) and can corrupt data on the disk. Power 2.5-inch hard disks from a powered USB hub or their own supply.

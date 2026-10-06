@@ -241,6 +241,11 @@
 .mk-urow strong{text-align:end;font-size:13px}
 
 /* Rows and helpers */
+.mk-feedback{display:inline-block;color:#059669;line-height:1.8;flex:1 1 220px;margin:6px}
+.mk-download-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+.mk-download-item{border:1px solid var(--line);background:var(--soft);border-radius:14px;padding:16px;margin:12px 0;overflow-wrap:anywhere}
+.mk-download-item code{display:block;overflow-wrap:anywhere;font-size:12px;margin:8px 0}
+.mk-clock{font-size:18px;font-weight:700;color:var(--text)}
 .mk-grow{flex:1 1 200px;min-width:0}
 .mk-grow small{display:block}
 .mk-mrow{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 0;border-bottom:1px solid var(--line)}

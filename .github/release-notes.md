@@ -2,7 +2,9 @@
 
 ## مخزن @TAG@ — فایل‌سرور خانگی برای OpenWrt
 
-در این نسخه حذف برنامه حساب‌ها، رمزها، تنظیمات و کل پوشهٔ موقت مخزن را پاک می‌کند و پوشه‌های خصوصی روی دیسک متصل را به سطل بازیابی می‌برد. نصب دوباره، دیسک NAS قبلی را از تنظیمات ذخیره‌شده وصل و کادر مسیر «حافظهٔ آماده» را پر می‌کند؛ شناسهٔ قبلی گروه در صورت آزادبودن بازیابی می‌شود.
+این انتشار بر مبنای نسخهٔ محلی پروژه است و README فارسی و انگلیسی را با همان رابط هماهنگ می‌کند: مدیریت دانلود در برگهٔ مستقل، صف پشت‌سرهم یا تا ۳ فایل همزمان، زمان‌بندی شمسی، بررسی فضای USB، توقف و ادامه، حذف و تغییر نام، جستجو، سقف سرعت، اتصال مجدد و لینک‌های رمزدار. ماژول تقویم با قالب موردنیاز LuCI و نام وابسته به نسخه بسته‌بندی می‌شود.
+
+این نسخه عین رابط 2.0.0 نیست؛ امکانات قابل استفاده از رابط را در README همین نسخه ببینید. سقف انتخاب دانلود همزمان در رابط این انتشار ۳ فایل است.
 
 > **برای ارتقا، نسخهٔ جدید را روی قبلی نصب کنید و اول حذف نکنید**.
 
@@ -41,7 +43,9 @@ opkg install /tmp/@IPK@
 
 ## Makhzan @TAG@ — home NAS for OpenWrt
 
-Removal now clears managed accounts, passwords, settings and the entire temporary directory, moving private homes on an available disk to recovery trash. Reinstalling reconnects the saved NAS disk, fills its path in Existing storage and reuses the former group ID when available.
+This release follows the local project revision and aligns the Persian and English README with its interface: a dedicated download manager, sequential or up to three concurrent files, Persian scheduling, USB space checks, pause/resume, delete/rename, search, bandwidth limits, retries and authenticated links. The calendar is packaged as a LuCI class under a versioned module name.
+
+This is not the same interface as 2.0.0. Refer to this version's README for exposed controls; its UI supports up to three concurrent files.
 
 > **To upgrade, install the new version over the existing one; do not uninstall first.**
 

@@ -76,6 +76,18 @@ makhzan_layout() {
  chmod a+x "$lay_root" &&
  chown root:root "$lay_root/users" "$lay_root/.makhzan-trash" && chmod 0711 "$lay_root/users" && chmod 0700 "$lay_root/.makhzan-trash" &&
  chown root:makhzan "$lay_root/shared" "$lay_root/media" && chmod 2770 "$lay_root/shared" && chmod 2775 "$lay_root/media" || return 1
+ # Download metadata and credentials are private; authenticated NAS users can only read completed files.
+ [ ! -L "$lay_root/.makhzan-downloads" ] || return 1
+ [ -e "$lay_root/.makhzan-downloads" ] || mkdir -m 0710 "$lay_root/.makhzan-downloads" || return 1
+ makhzan_same_fs "$lay_root" "$lay_root/.makhzan-downloads" || return 1
+ chown root:makhzan "$lay_root/.makhzan-downloads" && chmod 0710 "$lay_root/.makhzan-downloads" || return 1
+ for lay_dir in jobs completed; do
+  [ ! -L "$lay_root/.makhzan-downloads/$lay_dir" ] || return 1
+  [ -e "$lay_root/.makhzan-downloads/$lay_dir" ] || mkdir -m 0700 "$lay_root/.makhzan-downloads/$lay_dir" || return 1
+  makhzan_same_fs "$lay_root" "$lay_root/.makhzan-downloads/$lay_dir" || return 1
+ done
+ chown root:root "$lay_root/.makhzan-downloads/jobs" && chmod 0700 "$lay_root/.makhzan-downloads/jobs" || return 1
+ chown root:makhzan "$lay_root/.makhzan-downloads/completed" && chmod 0750 "$lay_root/.makhzan-downloads/completed" || return 1
  # Recreate missing private folders (e.g. after a new or re-partitioned disk) for Makhzan-managed accounts.
  for lay_user in $(awk -F: '$3>=1000 && $5=="makhzan" && $7=="/bin/false" {print $1}' /etc/passwd); do
   lay_home="$lay_root/users/$lay_user"

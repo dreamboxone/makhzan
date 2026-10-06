@@ -21,7 +21,7 @@ case "$format" in
 esac
 
 echo "== shell syntax"
-for f in /usr/sbin/makhzanctl /usr/libexec/makhzan-storage /usr/libexec/makhzan-usb.sh /usr/libexec/makhzan-remote /etc/init.d/makhzan; do
+for f in /usr/sbin/makhzanctl /usr/libexec/makhzan-storage /usr/libexec/makhzan-usb.sh /usr/libexec/makhzan-remote /usr/libexec/makhzan-download /etc/init.d/makhzan /etc/init.d/makhzan-download; do
 	sh -n "$f"
 done
 
@@ -29,6 +29,8 @@ echo "== LuCI files"
 ls /www/luci-static/resources/view/makhzan/overview_*.js /www/luci-static/resources/view/makhzan/theme.css
 grep -q '"path": "makhzan/overview_' /usr/share/luci/menu.d/luci-app-makhzan.json
 grep -q '/tmp/run/makhzan/secret' /usr/share/rpcd/acl.d/luci-app-makhzan.json
+calendar=$(sed -n 's/.*require view.makhzan.\(calendar_[a-zA-Z0-9_]*\) as calendar.*/\1/p' /www/luci-static/resources/view/makhzan/overview_*.js | head -n 1)
+[ -n "$calendar" ] && grep -q 'return baseclass.extend' "/www/luci-static/resources/view/makhzan/$calendar.js"
 
 echo "== backend"
 status=$(/usr/sbin/makhzanctl status); echo "$status"
@@ -37,6 +39,7 @@ echo "$status" | grep -q '"ready":false'
 /usr/sbin/makhzanctl storage-devices | grep -q '"ok":true'
 /usr/sbin/makhzanctl storage-ready | grep -q '"root":""'
 /usr/sbin/makhzanctl storage-job | grep -q '"state":"idle"'
+/usr/sbin/makhzanctl download-list | grep -q '"ready":0'
 /usr/sbin/makhzanctl add-user Invalid-Name | grep -q '"ok":false'
 /usr/sbin/makhzanctl mkdir nobody x | grep -q '"ok":false'
 /usr/sbin/makhzanctl language en | grep -q '"ok":true'

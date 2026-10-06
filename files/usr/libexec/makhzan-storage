@@ -367,6 +367,20 @@ job_status() {
  clear_stale
  if [ -s "$JOB" ]; then cat "$JOB"; elif [ -d "$LOCK" ]; then echo '{"state":"running"}'; else echo '{"state":"idle"}'; fi
 }
+# Serialize disk changes with the downloader's dispatch. No new transfer can start between
+# this check and creation of the storage-operation lock (or the end of a release).
+case "$1" in apply|check|release)
+ lock /var/lock/makhzan-download.lock || error 'Could not lock downloader'
+ trap 'lock -u /var/lock/makhzan-download.lock' EXIT
+ for df in /tmp/run/makhzan-download/worker.*; do
+ dp=$(cat "$df" 2>/dev/null)
+ case "$dp" in ''|*[!0-9]*) ;; *)
+  if kill -0 "$dp" 2>/dev/null && tr '\000' ' ' < "/proc/$dp/cmdline" 2>/dev/null | grep -q '/usr/libexec/makhzan-download worker '; then
+   error 'Pause the active download before changing the disk'
+  fi;;
+ esac
+ done;;
+esac
 case "$1" in
  devices) devices;;
  plan) plan "$2" "$3" "$4" "$5"; plan_json;;

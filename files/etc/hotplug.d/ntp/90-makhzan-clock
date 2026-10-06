@@ -1,0 +1,14 @@
+#!/bin/sh
+# Copyright (C) 2026 dreamboxone
+# SPDX-License-Identifier: GPL-3.0-only
+# This marker is RAM-only and tied to this boot: saved fake RTC time cannot start scheduled jobs.
+case "$ACTION" in step|stratum|periodic)
+ case "$stratum" in ''|*[!0-9]*) exit 0;; esac
+ if [ "$stratum" -gt 0 ] && [ "$stratum" -lt 16 ]; then
+  mkdir -p /tmp/run
+  cat /proc/sys/kernel/random/boot_id > /tmp/run/makhzan-clock-synced
+ else
+  rm -f /tmp/run/makhzan-clock-synced
+ fi;;
+ unsync) rm -f /tmp/run/makhzan-clock-synced;;
+esac

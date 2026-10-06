@@ -13,8 +13,9 @@
 'require fs';
 'require ui';
 'require poll';
+'require view.makhzan.calendar as calendar';
 
-var VERSION = '1.2.0';
+var VERSION = '2.0.1';
 /* Replaced with VERSION-RELEASE at package build time; busts the browser cache for theme.css. */
 var BUILD = '@MAKHZAN_BUILD@';
 var callExec = rpc.declare({ object: 'file', method: 'exec', params: [ 'command', 'params', 'env' ] });
@@ -108,6 +109,7 @@ function logo(height) {
 
 /* Persian translations of backend errors; unknown messages are shown as-is. */
 var FA_ERRORS = {
+	'Could not lock downloader': 'قفل مدیریت دانلود در دسترس نیست؛ دوباره تلاش کنید.',
 	'Another operation is running; wait until it completes': 'عملیات دیگری در حال اجراست؛ کمی صبر کنید.',
 	'Another storage operation is running': 'عملیات دیگری روی حافظه در حال اجراست.',
 	'USB storage is not ready: select a mounted USB ext4 disk': 'حافظهٔ USB آماده نیست؛ یک دیسک USB با فایل‌سیستم ext4 انتخاب کنید.',
@@ -214,7 +216,7 @@ var FA_ERRORS = {
 	'The disk is busy; close open files and try again': 'دیسک در حال استفاده است؛ فایل‌های باز را ببندید و دوباره امتحان کنید.',
 	'The disk operation was interrupted': 'عملیات دیسک نیمه‌کاره متوقف شد (مثلاً با قطع برق). دوباره اجرا کنید.',
 	'The item could not be restored': 'بازیابی انجام نشد.',
-	'The kernel driver for this filesystem is not installed': 'درایور این نوع فایل‌سیستم نصب نیست؛ بستهٔ گفته‌شده را از System ← Software نصب کنید.',
+	'The kernel driver for this filesystem is not installed': 'درایور این نوع فایل‌سیستم نصب نیست؛ بستهٔ گفته‌شده را از \u2066System → Software\u2069 نصب کنید.',
 	'The media library disk could not be mounted': 'دیسک کتابخانهٔ رسانه وصل نشد.',
 	'The owner of this item no longer exists; create a user with the same name first': 'صاحب این مورد دیگر وجود ندارد؛ ابتدا کاربری با همان نام بسازید.',
 	'This partition is already used by Makhzan': 'این پارتیشن را خود مخزن استفاده می‌کند (فایل‌سرور، extroot یا swap).',
@@ -225,7 +227,25 @@ var FA_ERRORS = {
 	'Unsupported filesystem for the media library': 'این نوع فایل‌سیستم برای کتابخانهٔ رسانه پشتیبانی نمی‌شود.',
 	'WireGuard is not installed': 'WireGuard نصب نیست (بسته‌های kmod-wireguard و wireguard-tools).',
 	'WireGuard key could not be created': 'کلید WireGuard ساخته نشد.',
-	'hd-idle is not installed': 'بستهٔ hd-idle نصب نیست.'
+	'hd-idle is not installed': 'بستهٔ hd-idle نصب نیست.',
+	'Not enough free USB space for this download and the queued files': 'فضای خالی کافی برای دانلود وجود ندارد. فضای موردنیاز فایل‌های صف نیز محاسبه شده است.',
+	'Not enough free USB space (64 MB reserve required)': 'فضای خالی USB کافی نیست؛ حداقل ۶۴ مگابایت باید آزاد بماند.',
+	'The server did not report the file size; free space cannot be verified': 'سرور حجم فایل را اعلام نکرد یا پاسخ نداد؛ امکان بررسی فضای کافی نیست. لینک مستقیم معتبر وارد کنید و دوباره تلاش کنید.',
+	'USB storage is not ready or its download directory is unsafe': 'حافظهٔ USB آماده نیست یا دسترسی پوشهٔ دانلود ایمن نیست.',
+	'Invalid Persian date or time': 'تاریخ یا ساعت شمسی معتبر نیست؛ نمونه: ۱۴۰۵/۰۷/۱۵ و ۲۳:۳۰.',
+	'Choose a future date and time': 'روز و ساعت آینده را انتخاب کنید؛ مبنا ساعت روتر به وقت تهران است.',
+	'Use a direct HTTP or HTTPS link without embedded credentials': 'لینک مستقیم HTTP یا HTTPS وارد کنید؛ نام کاربری و رمز در لینک مجاز نیست.',
+	'Invalid download filename': 'نام فایل معتبر نیست؛ از / و \\ و نام خالی استفاده نکنید.',
+	'The curl package is not installed': 'بستهٔ curl نصب نیست؛ آن را از \u2066System → Software\u2069 نصب کنید.',
+	'Pause the active download before changing the disk': 'قبل از تغییر یا آزادسازی دیسک، دانلودهای فعال را متوقف کنید.',
+	'USB storage disconnected': 'ارتباط حافظهٔ USB قطع شد.',
+	'Wait for the transfer to stop': 'چند لحظه صبر کنید تا انتقال متوقف شود.',
+	'Download history is full (100 items); remove old entries': 'صف و تاریخچه به سقف ۱۰۰ مورد رسیده؛ موارد قدیمی را حذف کنید.',
+	'Only a completed file can be renamed; choose a valid filename': 'فقط فایل کامل قابل تغییر نام است؛ یک نام معتبر وارد کنید.',
+	'Could not rename downloaded file': 'تغییر نام فایل دانلودشده انجام نشد.',
+	'Invalid download credentials': 'نام کاربری یا رمز واردشده معتبر نیست.',
+	'Bandwidth must be between 1 and 65536 KB/s': 'پهنای باند باید بین ۱ تا ۶۵۵۳۶ کیلوبایت بر ثانیه باشد.',
+	'Retry interval must be between 1 and 3600 seconds': 'فاصلهٔ تلاش مجدد باید بین ۱ تا ۳۶۰۰ ثانیه باشد.'
 };
 
 function bytes(kib) {
@@ -247,8 +267,21 @@ return view.extend({
 	render: function(initial) {
 		var data = initial[0], devices = initial[1].devices || [], fa = data.language === 'fa';
 		function t(p, e) { return fa ? p : e; }
-		function msgOf(e) { var m = String(e && e.message || e); return fa && FA_ERRORS[m] ? FA_ERRORS[m] : m; }
-		function notify(e) { ui.addNotification(null, E('p', {}, msgOf(e)), 'error'); }
+		function msgOf(e) {
+			var m = String(e && e.message || e), curl = m.match(/^Download failed \(curl code (\d+)\)$/);
+			if (fa && curl) return 'ارتباط دانلود ناموفق بود (کد ' + curl[1] + '). لینک، اینترنت و اطلاعات ورود را بررسی کنید.';
+			return fa && FA_ERRORS[m] ? FA_ERRORS[m] : m;
+		}
+		function notify(e, anchor) {
+			if (anchor && anchor.isConnected) { inlineError(anchor, e); return; }
+			var panel = panels && panels[activeTab];
+			if (panel) panel.appendChild(alertBox('error', 'alert', msgOf(e)));
+		}
+		function feedback(anchor, text) {
+			var old = anchor.nextElementSibling;
+			if (old && old.classList.contains('mk-feedback')) old.remove();
+			anchor.insertAdjacentElement('afterend', E('span', { 'class': 'mk-feedback', 'role': 'status' }, text));
+		}
 		/* Colored action button: tone is one of primary, success, warn, danger, glass, or soft-{blue,violet,amber,green,red}. */
 		/* Errors are shown right next to the button that caused them (not in LuCI's top banner). */
 		function inlineError(b, e) {
@@ -264,7 +297,7 @@ return view.extend({
 				var old = b.nextElementSibling;
 				if (old && old.classList.contains('mk-inline-error')) old.remove();
 				b.dataset.running = '1'; b.disabled = true; b.classList.add('mk-running');
-				Promise.resolve().then(fn).catch(function(e) { b.isConnected ? inlineError(b, e) : notify(e); })
+				Promise.resolve().then(function() { return fn(b); }).catch(function(e) { b.isConnected ? inlineError(b, e) : notify(e); })
 					.finally(function() { b.dataset.running = '0'; b.disabled = b.dataset.locked === '1'; b.classList.remove('mk-running'); });
 			} }, [ ico ? icon(ico) : '', E('span', {}, text) ]);
 			return b;
@@ -323,9 +356,8 @@ return view.extend({
 			E('div', { 'class': 'mk-row' }, [ theme, langBtn ])
 		]));
 
-		var banner = E('div', { 'role': 'status', 'aria-live': 'polite' }), metrics = E('div', { 'class': 'mk-grid mk-metrics' });
+		var metrics = E('div', { 'class': 'mk-grid mk-metrics' });
 		var usersBox = E('div', { 'class': 'mk-users' }), serviceArea = E('div'), connectBox = E('div');
-		root.appendChild(banner);
 
 		function refresh() {
 			return Promise.all([ call([ 'status' ]), call([ 'storage-devices' ]).catch(function() { return { devices: devices }; }) ])
@@ -383,7 +415,7 @@ return view.extend({
 			modal(t('تغییر رمز ', 'Change password: ') + user, p.fields.concat([ msg, actions([
 				btn(t('ذخیرهٔ رمز', 'Save password'), function() {
 					var err = p.check(); if (err) { msg.textContent = err; return; }
-					return sendPassword(p.a.value).then(function(token) { return call([ 'passwd', user, token ]); }).then(function() { ui.hideModal(); ui.addNotification(null, E('p', {}, t('رمز تغییر کرد.', 'Password changed.')), 'info'); return refresh(); }).catch(function(e) { msg.textContent = msgOf(e); });
+					return sendPassword(p.a.value).then(function(token) { return call([ 'passwd', user, token ]); }).then(function() { msg.textContent = t('رمز تغییر کرد.', 'Password changed.'); return refresh(); }).catch(function(e) { msg.textContent = msgOf(e); });
 				}, 'warn', 'key'), btn(t('انصراف', 'Cancel'), ui.hideModal, 'soft-violet', 'x') ]) ]), 'key');
 			p.a.focus();
 		}
@@ -417,7 +449,6 @@ return view.extend({
 		}
 
 		/* ---------- Status painting ---------- */
-		var lastJob = null;
 		function alertBox(kind, ico, text) { return E('p', { 'class': 'mk-alert ' + kind }, [ icon(ico), E('span', {}, text) ]); }
 		function paintJob(job) {
 			var box = E('div'), check = job.kind === 'check';
@@ -430,20 +461,18 @@ return view.extend({
 			}
 			else if (job.state === 'failed')
 				box.appendChild(alertBox('error', 'alert', (check ? t('بررسی دیسک ناموفق بود: ', 'Disk check failed: ') : t('آماده‌سازی دیسک ناموفق بود: ', 'Disk preparation failed: ')) + msgOf(job.error)));
-			else if (job.state === 'done' && lastJob === 'running') {
+			else if (job.state === 'done') {
 				if (!check) box.appendChild(alertBox('ok', 'check', t('دیسک با موفقیت آماده شد.', 'Disk prepared successfully.')));
 				else if (job.result === 'clean') box.appendChild(alertBox('ok', 'check', t('بررسی تمام شد: دیسک سالم است و خطایی پیدا نشد.', 'Check finished: the disk is healthy, no errors found.')));
 				else if (job.result === 'repaired') box.appendChild(alertBox('ok', 'wrench', t('بررسی تمام شد: خطاهای فایل‌سیستم پیدا و تعمیر شد.', 'Check finished: filesystem errors were found and repaired.')));
 				else if (job.result === 'errors') box.appendChild(alertBox('warn', 'alert', t('بعضی خطاها تعمیر نشد. از فایل‌های مهم نسخهٔ پشتیبان بگیرید و دیسک را عوض کنید.', 'Some errors could not be repaired. Back up important files and replace the disk.')));
 				else box.appendChild(alertBox('error', 'alert', t('بررسی دیسک اجرا نشد (کد ' + job.code + ').', 'The disk check could not run (code ' + job.code + ').')));
 			}
-			lastJob = job.state;
 			return box;
 		}
 		/* The job banner is refreshed on its own (cheap storage-job call), so it never sticks when the
 		 * heavier status call is slow during large USB copies. */
 		var fullBox = E('div'), jobBox = E('div'), extrootBox = E('div');
-		banner.replaceChildren(fullBox, jobBox, extrootBox);
 		function showJob(job) {
 			jobBox.replaceChildren(paintJob(job));
 			var running = job.state === 'running';
@@ -503,6 +532,7 @@ return view.extend({
 				metric(t('فلش / هارد USB', 'USB flash / hard drive'), String(devices.length), t('دیسک متصل', 'Connected disks'), '#f59e0b', 'usb')
 			);
 			showJob(d.job || { state: 'idle' });
+			paintExistingNas(d);
 			paintExtroot(d.extroot_state || 'off');
 
 			usersBox.replaceChildren();
@@ -532,7 +562,7 @@ return view.extend({
 				usersNote.appendChild(E('div', { 'class': 'mk-alert warn' }, [ icon('drive'), E('span', {}, t('قدم اول: دیسک USB را آماده کنید؛ بدون آن کاربر ساخته نمی‌شود.', 'First step: prepare the USB disk; users cannot be created without it.')),
 					btn(t('رفتن به زبانهٔ دیسک', 'Go to the Disk tab'), function() { showTab('disk'); }, 'warn mk-small', 'drive') ]));
 			else if (!s.samba_installed)
-				usersNote.appendChild(alertBox('warn', 'alert', t('برای ساخت کاربر بستهٔ samba4-server را از System ← Software نصب کنید.', 'Install samba4-server from System → Software to create users.')));
+				usersNote.appendChild(alertBox('warn', 'alert', t('برای ساخت کاربر بستهٔ samba4-server را از \u2066System → Software\u2069 نصب کنید.', 'Install samba4-server from System → Software to create users.')));
 			else if (!s.samba_enabled)
 				usersNote.appendChild(E('div', { 'class': 'mk-alert warn' }, [ icon('server'), E('span', {}, t('SMB خاموش است؛ برای ساخت کاربر و اتصال به فایل‌ها آن را روشن کنید.', 'SMB is off; turn it on to create users and reach the files.')),
 					btn(t('روشن کردن SMB', 'Turn on SMB'), function() { return call([ 'option', 'samba', '1' ]).then(function() { return call([ 'apply' ]); }).then(refresh); }, 'warn mk-small', 'check') ]));
@@ -541,7 +571,7 @@ return view.extend({
 			if (document.activeElement !== tmSize) tmSize.value = String(s.timemachine_gb || 0);
 			spinSelect.disabled = !s.spindown_supported;
 			if (document.activeElement !== spinSelect) spinSelect.value = String([ 0, 10, 20, 30, 60, 120 ].indexOf(s.spindown_minutes) >= 0 ? s.spindown_minutes : 0);
-			spinNote.textContent = s.spindown_supported ? '' : t('برای این قابلیت بستهٔ hd-idle را از System ← Software نصب کنید.', 'Install the hd-idle package from System → Software for this feature.');
+			spinNote.textContent = s.spindown_supported ? '' : t('برای این قابلیت بستهٔ hd-idle را از \u2066System → Software\u2069 نصب کنید.', 'Install the hd-idle package from System → Software for this feature.');
 
 			var host = location.hostname;
 			connectBox.replaceChildren(E('div', { 'class': 'mk-connect', 'dir': 'ltr' }, [
@@ -564,6 +594,13 @@ return view.extend({
 		var select = E('select', { 'dir': 'ltr', 'aria-label': t('انتخاب فلش مموری / هارد USB', 'USB flash / hard drive') });
 		var devInfo = E('div'), roles = [], roleGrid = E('div', { 'class': 'mk-grid mk-roles' }), bar = E('div', { 'class': 'mk-track mk-track-lg' });
 		var summary = E('p', { 'role': 'status', 'aria-live': 'polite', 'class': 'mk-summary' }), nasWarn = E('div', { 'role': 'alert' });
+		var existingNas = E('div', { 'role': 'status', 'aria-live': 'polite' });
+		function paintExistingNas(d) {
+			existingNas.replaceChildren(d.disk ? alertBox('ok', 'check', [
+				t('فایل‌سرور NAS ساخته و متصل شده است: ', 'NAS storage is created and mounted: '),
+				num(d.disk.root), ' · ', num(bytes(d.disk.total_kib))
+			]) : alertBox('', 'server', t('هنوز فایل‌سرور NAS آماده نیست.', 'NAS storage is not ready yet.')));
+		}
 		function fillDevices() {
 			var keep = select.value;
 			select.replaceChildren();
@@ -583,7 +620,7 @@ return view.extend({
 			var tile;
 			check.addEventListener('change', function() { input.disabled = !check.checked; tile.classList.toggle('mk-role-on', check.checked); plot(); });
 			input.addEventListener('input', plot);
-			var body = [ E('label', { 'class': 'mk-switch-row' }, [ check, E('span', {}, t('فعال باشد', 'Include')) ]), E('div', { 'class': 'mk-unit' }, [ input, E('span', {}, 'MB') ]), E('small', {}, role[5]) ];
+			var body = [ E('label', { 'class': 'mk-switch-row' }, [ check, E('span', {}, t('در طرح جدید باشد', 'Include in new plan')) ]), E('div', { 'class': 'mk-unit' }, [ input, E('span', {}, 'MB') ]), E('small', {}, role[5]) ];
 			if (idx === 2) body.push(btn(t('همهٔ فضای باقی‌مانده', 'Use all remaining'), function() {
 				var disk = current(); if (!disk) return;
 				check.checked = true; input.disabled = false; tile.classList.add('mk-role-on');
@@ -591,6 +628,7 @@ return view.extend({
 				input.value = String(Math.max(0, mibToMB(disk.size_mib - 16 - other) - 1)); plot();
 			}, 'soft-green mk-small', 'maximize'));
 			tile = card(role[0] + ' · ' + role[1], body, role[3], role[4], 'mk-role');
+			if (idx === 0) tile.appendChild(extrootBox);
 			roleGrid.appendChild(tile);
 		});
 		function values() { return roles.map(function(r) { return r.check.checked ? String(mbToMiB(r.input.value)) : '0'; }); }
@@ -629,7 +667,7 @@ return view.extend({
 					disk.system ? E('span', {}, t('extroot فعال روی این دیسک است و قابل آزادسازی نیست.', 'It holds the active extroot and cannot be released.')) :
 					btn(t('آزادسازی دیسک (جداکردن امن)', 'Release disk (safe removal)'), function() {
 						if (!confirm(t('اشتراک‌ها موقتاً قطع و دیسک آزاد می‌شود. ادامه می‌دهید؟', 'Shares will stop briefly and the disk will be released. Continue?'))) return;
-						return call([ 'storage-release', disk.path ]).then(function() { ui.addNotification(null, E('p', {}, t('دیسک آزاد شد؛ اکنون می‌توانید آن را جدا یا دوباره تقسیم کنید.', 'Disk released; you can unplug or re-partition it now.')), 'info'); return refresh(); });
+						return call([ 'storage-release', disk.path ]).then(function() { return refresh(); }).then(function() { devInfo.appendChild(alertBox('ok', 'check', t('دیسک آزاد شد؛ اکنون می‌توانید آن را جدا یا دوباره تقسیم کنید.', 'Disk released; you can unplug or re-partition it now.'))); });
 					}, 'warn', 'eject') ]));
 			}
 		}
@@ -658,17 +696,18 @@ return view.extend({
 					actions([ btn(t('پاک‌کردن و ساخت', 'Erase and create'), function() {
 						if (typed.value.trim() !== disk) { msg.textContent = t('متن تایپ‌شده با ' + disk + ' یکسان نیست.', 'The typed text does not match ' + disk + '.'); typed.focus(); return; }
 						return call([ 'storage-apply', disk ].concat(v, [ 'ERASE:' + disk + ':' + v.join(':') ])).then(function() {
-							ui.hideModal(); lastJob = 'running'; return refresh();
+							ui.hideModal(); return refresh();
 						}).catch(function(e) { msg.textContent = msgOf(e); });
 					}, 'danger', 'layers'), btn(t('انصراف', 'Cancel'), ui.hideModal, 'soft-violet', 'x') ])
 				], 'layers');
 			});
 		}, 'primary', 'layers');
 		var planner = card(t('تقسیم فضای دیسک USB', 'USB disk allocation'), [
+			existingNas,
 			E('p', { 'class': 'mk-muted' }, t('هر گزینه مستقل است؛ یک، دو یا هر سه را انتخاب کنید.', 'Each role is optional; choose one, two or all three.')),
 			E('div', { 'class': 'mk-select' }, [ icon('usb'), select ]), devInfo, roleGrid, bar, summary, nasWarn,
 			alertBox('', 'alert', t('این عملیات کل دیسک را پاک می‌کند. دیسک در حال استفاده ابتدا باید آزاد شود.', 'This erases the whole disk. A disk in use must be released first.')),
-			prepare
+			prepare, jobBox
 		], '#8b5cf6', 'layers');
 
 		/* ---------- Services ---------- */
@@ -679,7 +718,7 @@ return view.extend({
 			check.addEventListener('change', function() {
 				check.disabled = true;
 				call([ 'option', s[1], check.checked ? '1' : '0' ]).then(function() { return call([ 'apply' ]); }).then(refresh)
-					.catch(function(e) { check.checked = !check.checked; call([ 'option', s[1], check.checked ? '1' : '0' ]).catch(function() {}); notify(e); })
+					.catch(function(e) { check.checked = !check.checked; call([ 'option', s[1], check.checked ? '1' : '0' ]).catch(function() {}); notify(e, check); })
 					.finally(function() { check.disabled = !installed; });
 			});
 			serviceArea.appendChild(E('div', { 'class': 'mk-service', 'style': '--accent:' + s[7] }, [
@@ -696,18 +735,18 @@ return view.extend({
 		}
 		tmCheck.addEventListener('change', function() {
 			tmCheck.disabled = true;
-			tmApply().catch(function(e) { tmCheck.checked = !tmCheck.checked; notify(e); }).finally(function() { tmCheck.disabled = !data.services.timemachine_supported; });
+			tmApply().catch(function(e) { tmCheck.checked = !tmCheck.checked; notify(e, tmCheck); }).finally(function() { tmCheck.disabled = !data.services.timemachine_supported; });
 		});
 		serviceArea.appendChild(E('div', { 'class': 'mk-service', 'style': '--accent:#64748b' }, [
 			E('span', { 'class': 'mk-service-ico' }, icon('clock')),
 			E('div', { 'class': 'mk-service-text' }, [ E('strong', {}, [ 'Time Machine', E('span', { 'class': 'mk-engine' }, 'macOS') ]),
-				E('small', {}, t('پشتیبان‌گیری خودکار مک روی پوشهٔ خصوصی هر کاربر. در مک: System Settings ← Time Machine ← Add Backup Disk و پوشهٔ خودتان را انتخاب کنید.', 'Automatic Mac backups into each user\'s private folder. On the Mac: System Settings → Time Machine → Add Backup Disk, then pick your own folder.')),
+				E('small', {}, t('پشتیبان‌گیری خودکار مک روی پوشهٔ خصوصی هر کاربر. در مک: \u2066System Settings → Time Machine → Add Backup Disk\u2069 و پوشهٔ خودتان را انتخاب کنید.', 'Automatic Mac backups into each user\'s private folder. On the Mac: System Settings → Time Machine → Add Backup Disk, then pick your own folder.')),
 				E('div', { 'class': 'mk-row mk-inline' }, [ E('span', {}, t('سقف حجم هر کاربر (GB، صفر = بدون سقف):', 'Size limit per user (GB, 0 = none):')), tmSize,
 					btn(t('ذخیره', 'Save'), function() { return tmApply(); }, 'soft-blue mk-small', 'check') ]) ]),
 			tmCheck ]));
 		var services = card(t('سرویس‌های شبکه', 'Network services'), [ serviceArea,
-			E('div', { 'class': 'mk-row' }, [ btn(t('اسکن دوبارهٔ کتابخانهٔ DLNA', 'Rescan DLNA library'), function() {
-				return call([ 'dlna-rescan' ]).then(function() { ui.addNotification(null, E('p', {}, t('کتابخانهٔ DLNA از نو ساخته می‌شود؛ چند دقیقه بعد همهٔ فایل‌ها روی تلویزیون دیده می‌شوند.', 'The DLNA library is being rebuilt; all files appear on TVs within a few minutes.')), 'info'); });
+			E('div', { 'class': 'mk-row' }, [ btn(t('اسکن دوبارهٔ کتابخانهٔ DLNA', 'Rescan DLNA library'), function(b) {
+				return call([ 'dlna-rescan' ]).then(function() { feedback(b, t('کتابخانهٔ DLNA از نو ساخته می‌شود؛ چند دقیقه بعد همهٔ فایل‌ها روی تلویزیون دیده می‌شوند.', 'The DLNA library is being rebuilt; all files appear on TVs within a few minutes.')); });
 			}, 'soft-blue', 'refresh'), E('small', {}, t('اگر فیلمی را کپی کرده‌اید و روی تلویزیون دیده نمی‌شود.', 'If a copied video does not show up on the TV.')) ]),
 			E('p', { 'class': 'mk-muted' }, t('آدرس‌های اتصال (فقط از شبکهٔ داخلی LAN):', 'Connection addresses (LAN only):')), connectBox,
 			alertBox('ok', 'shield', t('هر کاربر فقط پوشهٔ خصوصی خودش را می‌بیند. بعد از ۴ رمز اشتباه، حساب ۱۵ دقیقه قفل می‌شود.', 'Each user sees only their own private share. After 4 wrong passwords the account is locked for 15 minutes.')),
@@ -731,8 +770,7 @@ return view.extend({
 						E('small', {}, [ t('صاحب: ', 'Owner: '), E('bdi', { 'dir': 'ltr' }, it.user), ' · ', t('حذف: ', 'Deleted: '), num(it.deleted), ' · ', it.size_kib >= 0 ? num(bytes(it.size_kib)) : '…' ]) ]),
 					btn(t('بازیابی', 'Restore'), function() {
 						return call([ 'trash-restore', it.user, it.entry ]).then(function(res) {
-							ui.addNotification(null, E('p', {}, [ t('بازیابی شد در پوشهٔ خصوصی ', 'Restored into the private folder of '), E('bdi', { 'dir': 'ltr' }, it.user), ': ', res.restored ]), 'info');
-							return loadTrash().then(refresh);
+							return loadTrash().then(refresh).then(function() { trashList.appendChild(alertBox('ok', 'check', t('بازیابی شد در پوشهٔ خصوصی ', 'Restored into the private folder of ') + it.user + ': ' + res.restored)); });
 						});
 					}, 'soft-green', 'restore'),
 					btn(t('حذف همیشگی', 'Delete forever'), function() {
@@ -753,7 +791,7 @@ return view.extend({
 		/* ---------- Disk maintenance: filesystem check and spin-down ---------- */
 		var checkBtn = btn(t('بررسی و تعمیر دیسک', 'Check and repair disk'), function() {
 			if (!confirm(t('اشتراک‌ها و DLNA چند دقیقه قطع می‌شوند و فایل‌سیستم دیسک بررسی و در صورت نیاز تعمیر می‌شود. ادامه می‌دهید؟', 'Shares and DLNA stop for a few minutes while the filesystem is checked and repaired if needed. Continue?'))) return;
-			return call([ 'storage-check' ]).then(function() { lastJob = 'running'; return refresh(); });
+			return call([ 'storage-check' ]).then(refresh);
 		}, 'warn', 'wrench');
 		var spinSelect = E('select', { 'dir': fa ? 'rtl' : 'ltr', 'class': 'mk-narrow-select', 'aria-label': t('خاموش شدن خودکار هارد', 'Hard-disk spin-down') },
 			[ 0, 10, 20, 30, 60, 120 ].map(function(m) { return E('option', { 'value': String(m) }, m ? m + ' ' + t('دقیقه', 'min') : t('خاموش', 'Off')); }));
@@ -838,7 +876,7 @@ return view.extend({
 		}
 		function paintRemote(r) {
 			remoteBox.replaceChildren();
-			if (!r.installed) { remoteBox.appendChild(alertBox('warn', 'alert', t('WireGuard نصب نیست. بسته‌های kmod-wireguard و wireguard-tools را از System ← Software نصب کنید.', 'WireGuard is not installed. Install kmod-wireguard and wireguard-tools from System → Software.'))); return; }
+			if (!r.installed) { remoteBox.appendChild(alertBox('warn', 'alert', t('WireGuard نصب نیست. بسته‌های kmod-wireguard و wireguard-tools را از \u2066System → Software\u2069 نصب کنید.', 'WireGuard is not installed. Install kmod-wireguard and wireguard-tools from System → Software.'))); return; }
 			if (r.wan_private) remoteBox.appendChild(alertBox('warn', 'alert', [
 				t('آدرس اینترنت این روتر خصوصی است (', 'This router\'s internet address is private ('), num(r.wan_ip || '—'),
 				t('): روتر پشت مودم دیگری است. در مودم اصلی پورت UDP ', '): it sits behind another modem. On that modem forward UDP port '), num(String(r.port)),
@@ -907,6 +945,181 @@ return view.extend({
 			usageBox.appendChild(E('small', {}, [ t('فضای آزاد: ', 'Free: '), num(bytes(d.disk.available_kib)), ' · ', t('هر ۵ دقیقه به‌روز می‌شود.', 'Updated every 5 minutes.') ]));
 		}
 
+		/* ---------- Scheduled downloads ---------- */
+		var downloadState = null, downloadLoading = null, dateEdited = false;
+		var downloadEnabled = E('input', { 'type': 'checkbox', 'class': 'mk-switch' });
+		downloadEnabled.addEventListener('change', function() {
+			downloadEnabled.disabled = true;
+			call([ 'download-enabled', downloadEnabled.checked ? '1' : '0' ]).then(loadDownloads)
+				.catch(function(e) { downloadEnabled.checked = !downloadEnabled.checked; notify(e, downloadEnabled); })
+				.finally(function() { downloadEnabled.disabled = false; });
+		});
+		var limitInput = E('input', { 'type': 'number', 'min': '1', 'max': '65536', 'step': '1', 'dir': 'ltr' });
+		var redialCheck = E('input', { 'type': 'checkbox', 'class': 'mk-switch' });
+		var redialInterval = E('input', { 'type': 'number', 'min': '1', 'max': '3600', 'step': '1', 'dir': 'ltr' });
+		var downloadSettings = card(t('مدیریت دانلود', 'Download manager'), [
+			E('label', { 'class': 'mk-switch-row mk-option' }, [ downloadEnabled, E('span', {}, t('روشن؛ اجرای خودکار و ادامهٔ صف پس از روشن‌شدن روتر', 'Enabled; automatically continue the queue after router startup')) ]),
+			E('small', {}, t('خاموش‌کردن این بخش انتقال‌ها را متوقف می‌کند و صف را نگه می‌دارد. با روشن‌کردن دوباره ادامه می‌یابند؛ فایل‌هایی که دستی متوقف کرده‌اید منتظر «ادامه» می‌مانند.', 'Disabling stops transfers but keeps the queue. Enabling resumes them; manually paused jobs wait for Resume.')),
+			field(t('سقف مجموع پهنای باند دانلودها (KB/s)', 'Total download bandwidth limit (KB/s)'), limitInput),
+			btn(t('ذخیرهٔ محدودیت', 'Save limit'), function(b) {
+				return call([ 'download-limit', calendar.digits(limitInput.value) ]).then(function() { feedback(b, t('ذخیره شد؛ روی انتقال‌های تازه یا ادامه‌داده‌شده اعمال می‌شود.', 'Saved; applies to new or resumed transfers.')); });
+			}, 'soft-blue', 'check'),
+			E('small', {}, t('سقف بین تعداد دانلود همزمان انتخاب‌شده تقسیم می‌شود. برای اعمال تغییر روی انتقال‌های فعال، «توقف همه» و سپس «ادامهٔ همه» را بزنید.', 'The limit is divided by the selected concurrency. To apply a change to active transfers, use Pause all, then Resume all.')),
+			E('label', { 'class': 'mk-switch-row mk-option' }, [ redialCheck, E('span', {}, t('تلاش مجدد اتصال پس از قطعی (Redial)', 'Reconnect after a disconnection (Redial)')) ]),
+			field(t('فاصلهٔ تلاش مجدد (ثانیه)', 'Retry interval (seconds)'), redialInterval),
+			btn(t('ذخیرهٔ اتصال مجدد', 'Save retry settings'), function(b) {
+				return call([ 'download-redial', redialCheck.checked ? '1' : '0', calendar.digits(redialInterval.value) ]).then(function() { feedback(b, t('تنظیمات تلاش مجدد ذخیره شد.', 'Retry settings saved.')); });
+			}, 'soft-blue', 'refresh'),
+			E('small', {}, t('حداکثر ۵ تلاش برای هر دانلود؛ پس از آن امکان «تلاش دوباره» وجود دارد. خطای رمز، نبود فایل و کمبود فضا خودکار تکرار نمی‌شوند.', 'Up to 5 attempts per download, then Retry is available. Authentication errors, missing files and insufficient space are not retried automatically.'))
+		], '#3b82f6', 'download');
+		var clockText = E('p', { 'class': 'mk-clock', 'role': 'status' }), clockNote = E('small');
+		var zoneBtn = btn(t('تنظیم ساعت روتر روی تهران', 'Set router timezone to Tehran'), function(b) {
+			return call([ 'download-tehran' ]).then(function() {
+				feedback(b, t('ساعت روتر روی تهران تنظیم شد.', 'Router timezone set to Tehran.')); return loadDownloads();
+			});
+		}, 'soft-blue', 'clock');
+		var clockCard = card(t('ساعت و تقویم روتر', 'Router clock and calendar'), [ clockText,
+			E('div', { 'class': 'mk-row' }, [ zoneBtn, clockNote,
+				btn(t('همگام‌سازی ساعت اینترنتی', 'Sync with internet time'), function(b) {
+					return call([ 'download-sync-clock' ]).then(function() { feedback(b, t('درخواست همگام‌سازی ارسال شد؛ نتیجه در همین بخش نشان داده می‌شود.', 'Time sync requested; its result appears here.')); });
+				}, 'soft-violet', 'refresh') ])
+		], '#6366f1', 'clock');
+		var urlInput = E('input', { 'type': 'url', 'dir': 'ltr', 'placeholder': 'https://example.com/file.zip', 'autocomplete': 'off', 'maxlength': '4096' });
+		var nameInput = E('input', { 'placeholder': 'file.zip', 'maxlength': '120', 'autocomplete': 'off' });
+		var authCheck = E('input', { 'type': 'checkbox', 'class': 'mk-switch' });
+		var authUser = E('input', { 'dir': 'ltr', 'autocomplete': 'off', 'maxlength': '128' });
+		var authPass = E('input', { 'type': 'password', 'dir': 'ltr', 'autocomplete': 'new-password', 'maxlength': '512' });
+		var authFields = E('div', { 'hidden': true }, [ field(t('نام کاربری دانلود', 'Download username'), authUser), field(t('رمز دانلود', 'Download password'), authPass),
+			E('small', {}, t('برای لینک‌های HTTP Basic یا Digest. ورود فرم وب‌سایت پشتیبانی نمی‌شود. برای حفاظت از رمز از HTTPS استفاده کنید. اطلاعات ورود فقط در پوشهٔ خصوصی مدیر روی USB ذخیره می‌شود.', 'For HTTP Basic or Digest links; website login forms are not supported. Use HTTPS to protect credentials. Credentials are stored in a private administrator directory on USB.')) ]);
+		authCheck.addEventListener('change', function() { authFields.hidden = !authCheck.checked; });
+		var scheduled = E('input', { 'type': 'checkbox', 'class': 'mk-switch' });
+		var dateInput = E('input', { 'dir': 'ltr', 'placeholder': '1405/07/15', 'inputmode': 'numeric', 'aria-label': t('تاریخ شمسی', 'Persian date') });
+		var timeInput = E('input', { 'type': 'time', 'dir': 'ltr', 'aria-label': t('ساعت تهران', 'Tehran time') });
+		var datePreview = E('p', { 'class': 'mk-muted', 'role': 'status' });
+		var scheduleFields = E('div', { 'hidden': true }, [
+			E('div', { 'class': 'mk-grid mk-download-fields' }, [ field(t('تاریخ شمسی (سال/ماه/روز)', 'Persian date (year/month/day)'), dateInput), field(t('ساعت تهران', 'Tehran time'), timeInput) ]), datePreview ]);
+		function previewDate() {
+			dateEdited = true;
+			try { datePreview.textContent = calendar.display(calendar.toEpoch(dateInput.value, timeInput.value), fa); }
+			catch (e) { datePreview.textContent = msgOf(e); }
+		}
+		dateInput.addEventListener('input', previewDate); timeInput.addEventListener('input', previewDate);
+		scheduled.addEventListener('change', function() { scheduleFields.hidden = !scheduled.checked; });
+		urlInput.addEventListener('change', function() {
+			if (!nameInput.value) try { nameInput.value = decodeURIComponent(new URL(urlInput.value).pathname.split('/').pop() || 'download.bin'); } catch (e) {}
+		});
+		var powerCheck = E('input', { 'type': 'checkbox', 'class': 'mk-switch' });
+		var formMsg = E('div', { 'role': 'status', 'aria-live': 'polite' });
+		var requestToken = null, requestKey = '';
+		function newToken() { var a = new Uint8Array(16); window.crypto.getRandomValues(a); return Array.from(a, function(n) { return n.toString(16).padStart(2, '0'); }).join(''); }
+		var downloadAdd = btn(t('بررسی فضا و افزودن به صف', 'Check space and add to queue'), function() {
+			formMsg.textContent = '';
+			var start = scheduled.checked ? calendar.toEpoch(dateInput.value, timeInput.value) : 0;
+			var args = [ urlInput.value.trim(), nameInput.value.trim(), String(start), powerCheck.checked ? '1' : '0' ];
+			var key = args.join('\n');
+			if (key !== requestKey || !requestToken) { requestKey = key; requestToken = newToken(); }
+			formMsg.textContent = t('در حال بررسی حجم لینک و فضای USB…', 'Checking link size and USB free space…');
+			return (authCheck.checked ? sendPassword(JSON.stringify({ username: authUser.value, password: authPass.value })) : Promise.resolve(''))
+				.then(function(secret) { return call([ 'download-add', requestToken ].concat(args, [ secret ])); }).then(function() {
+				requestToken = null; urlInput.value = ''; nameInput.value = ''; powerCheck.checked = false;
+				authPass.value = '';
+				formMsg.replaceChildren(alertBox('ok', 'check', t('دانلود در صف ثبت شد. با بستن مرورگر یا ریبوت از بین نمی‌رود.', 'Download queued. It survives closing the browser or rebooting.')));
+				return loadDownloads();
+			}).catch(function(e) { formMsg.replaceChildren(alertBox('error', 'alert', msgOf(e))); });
+		}, 'success', 'download');
+		var newDownload = card(t('دانلود جدید', 'New download'), [
+			field(t('لینک مستقیم فایل', 'Direct file link'), urlInput), field(t('نام فایل', 'Filename'), nameInput),
+			E('label', { 'class': 'mk-switch-row mk-option' }, [ authCheck, E('span', {}, t('این لینک به نام کاربری و رمز نیاز دارد', 'This link requires a username and password')) ]), authFields,
+			E('label', { 'class': 'mk-switch-row mk-option' }, [ scheduled, E('span', {}, t('شروع در روز و ساعت دلخواه (شمسی)', 'Start on a chosen Persian date and time')) ]), scheduleFields,
+			E('label', { 'class': 'mk-switch-row mk-option' }, [ powerCheck, E('span', {}, t('پس از پایان موفق دانلودها، سیستم روتر خاموش شود', 'Shut down the router after downloads finish successfully')) ]),
+			E('small', {}, t('خاموشی فقط وقتی صف تمام شده و کار آینده، متوقف یا خطادار نمانده انجام می‌شود؛ ۶۰ ثانیه فرصت لغو دارید. اینترنت و Wi-Fi قطع می‌شوند. قطع برق کامل به سخت‌افزار بستگی دارد؛ برای روشن‌کردن دوباره معمولاً باید برق را قطع و وصل کنید.', 'Shutdown waits until the whole queue is finished, with no future, paused or failed jobs. A 60-second countdown can be cancelled. Internet and Wi-Fi stop. Full power removal depends on the hardware; restarting usually requires a power cycle.')),
+			downloadAdd, formMsg,
+			E('small', {}, t('فقط روی USB ذخیره می‌شود. حجم تمام فایل‌های صف پیشاپیش محاسبه می‌شود. لینک‌های ناشناخته از نظر حجم پذیرفته نمی‌شوند. فایل نهایی در اشتراک فقط‌خواندنی Downloads قرار می‌گیرد؛ برای دسترسی شبکه SMB را فعال کنید.', 'Stored on USB only. Space for all queued files is reserved in advance. Links of unknown size are rejected. Finished files appear in the read-only Downloads share; enable SMB for network access.'))
+		], '#10b981', 'download');
+		var queueMode = E('select', { 'aria-label': t('نحوهٔ اجرای صف', 'Queue mode') }, [
+			E('option', { 'value': '1' }, t('پشت‌سرهم (یک فایل)', 'Sequential (one file)')),
+			E('option', { 'value': '2' }, t('همزمان: ۲ فایل', 'Concurrent: 2 files')),
+			E('option', { 'value': '3' }, t('همزمان: ۳ فایل', 'Concurrent: 3 files')) ]);
+		queueMode.addEventListener('change', function() {
+			queueMode.disabled = true;
+			call([ 'download-parallel', queueMode.value ]).then(function() { feedback(queueMode, t('روش اجرای صف ذخیره شد؛ دانلودهای فعال ادامه پیدا می‌کنند.', 'Queue mode saved; active transfers continue.')); return loadDownloads(); })
+				.catch(function(e) { notify(e, queueMode); }).finally(function() { queueMode.disabled = false; });
+		});
+		var downloadList = E('div'), shutdownBox = E('div'), queueNote = E('div');
+		var downloadSearch = E('input', { 'type': 'search', 'placeholder': t('جستجوی نام فایل…', 'Search filename…'), 'aria-label': t('جستجوی دانلودها', 'Search downloads') });
+		var downloadFilter = E('select', { 'aria-label': t('فیلتر فایل‌ها', 'Filter files') }, [ E('option', { 'value': 'all' }, t('همه', 'All')), E('option', { 'value': 'completed' }, t('دانلودشده‌ها', 'Completed')), E('option', { 'value': 'pending' }, t('فعال و در صف', 'Active and queued')) ]);
+		downloadSearch.addEventListener('input', function() { if (downloadState) paintDownloads(downloadState); });
+		downloadFilter.addEventListener('change', function() { if (downloadState) paintDownloads(downloadState); });
+		function duration(seconds) { var s = Math.max(0, Math.floor(seconds || 0)); return [ Math.floor(s / 3600), Math.floor(s / 60) % 60, s % 60 ].map(function(v) { return String(v).padStart(2, '0'); }).join(':'); }
+		function speedText(value) { var kb = Number(value || 0) / 1024; return kb >= 1024 ? (kb / 1024).toFixed(2) + ' MB/s' : kb.toFixed(1) + ' KB/s'; }
+		function paintDownloads(r) {
+			downloadState = r;
+			if (!downloadEnabled.disabled) downloadEnabled.checked = !!r.enabled;
+			if (document.activeElement !== limitInput) limitInput.value = String(r.limit);
+			if (document.activeElement !== redialInterval) redialInterval.value = String(r.retry_interval);
+			if (document.activeElement !== redialCheck) redialCheck.checked = !!r.redial;
+			clockText.textContent = calendar.display(r.clock.now, fa);
+			zoneBtn.disabled = !!r.clock.tehran;
+			clockNote.textContent = r.clock.tehran ? t('ساعت از قبل روی تهران تنظیم شده است.', 'The timezone is already set to Tehran.') : t('منطقهٔ زمانی فعلی: ', 'Current timezone: ') + r.clock.zone;
+			if (!dateEdited) { dateInput.value = calendar.dateInput(r.clock.now + 600); timeInput.value = calendar.timeInput(r.clock.now + 600); }
+			queueMode.value = String(r.parallel);
+			downloadAdd.disabled = !r.ready || !r.installed;
+			downloadAdd.dataset.locked = downloadAdd.disabled ? '1' : '0';
+			queueNote.replaceChildren();
+			if (!r.enabled) queueNote.appendChild(alertBox('', 'download', t('مدیر دانلود خاموش است؛ فایل‌ها در صف می‌مانند تا آن را روشن کنید.', 'Download manager is disabled; queued files wait until you enable it.')));
+			if (!r.clock.synced) queueNote.appendChild(alertBox('warn', 'clock', t('ساعت هنوز در این روشن‌شدن با اینترنت همگام نشده؛ دانلودهای زمان‌دار منتظر می‌مانند. دانلود فوری می‌تواند اجرا شود.', 'Time has not synchronized during this boot. Scheduled jobs wait; immediate jobs can run.')));
+			if (!r.ready) queueNote.appendChild(alertBox('warn', 'usb', t('ابتدا حافظهٔ USB را در زبانهٔ دیسک آماده کنید.', 'Prepare USB storage on the Disk tab first.')));
+			if (!r.installed) queueNote.appendChild(alertBox('warn', 'download', msgOf('The curl package is not installed')));
+			shutdownBox.replaceChildren();
+			if (r.shutdown_seconds > 0) shutdownBox.appendChild(E('div', { 'class': 'mk-alert warn' }, [
+				E('span', {}, t('خاموشی روتر تا ', 'Router shutdown in ') + r.shutdown_seconds + t(' ثانیه', ' seconds')),
+				btn(t('لغو خاموشی', 'Cancel shutdown'), function() { return call([ 'download-shutdown-cancel' ]).then(loadDownloads); }, 'warn', 'x') ]));
+			downloadList.replaceChildren();
+			var labels = { queued: t('در صف', 'Queued'), downloading: t('در حال دانلود', 'Downloading'), paused: t('متوقف', 'Paused'), failed: t('خطا', 'Failed'), completed: t('تمام‌شده', 'Completed'), cancelled: t('لغوشده', 'Cancelled'), finalizing: t('ذخیرهٔ نهایی', 'Finalizing'), deleting: t('در حال حذف', 'Deleting'), renaming: t('در حال تغییر نام', 'Renaming') };
+			if (!r.jobs.length) downloadList.appendChild(E('p', { 'class': 'mk-muted' }, t('صف دانلود خالی است.', 'The download queue is empty.')));
+			r.jobs.sort(function(a, b) { return a.order - b.order; }).forEach(function(j) {
+				if (j.name.toLocaleLowerCase().indexOf(downloadSearch.value.toLocaleLowerCase()) < 0) return;
+				if (downloadFilter.value === 'completed' && j.state !== 'completed') return;
+				if (downloadFilter.value === 'pending' && [ 'queued', 'downloading', 'paused' ].indexOf(j.state) < 0) return;
+				var pct = j.expected ? Math.min(100, j.bytes * 100 / j.expected) : (j.state === 'completed' ? 100 : 0);
+				var row = E('div', { 'class': 'mk-download-item' }, [
+					E('div', { 'class': 'mk-row' }, [ E('strong', { 'class': 'mk-grow' }, j.name), E('span', { 'class': 'mk-chip' }, labels[j.state] || j.state) ]),
+					E('small', {}, j.start ? calendar.display(j.start, fa) : t('شروع فوری به ترتیب صف', 'Start as soon as a queue slot is available')),
+					E('div', { 'class': 'mk-track' }, E('i', { 'style': 'width:' + pct + '%;background:linear-gradient(90deg,#06b6d4,#10b981)' })),
+					E('small', {}, [ num(bytes(j.bytes / 1024) + ' / ' + bytes(j.expected / 1024)), ' · ', num(Math.floor(pct) + '%'), ' · ', num(speedText(j.speed)) ]),
+					E('small', {}, [ t('زمان سپری‌شده: ', 'Elapsed: '), num(duration(j.elapsed)), ' · ', t('باقی‌مانده: ', 'Remaining: '), j.speed > 0 ? num(duration(j.eta)) : j.state === 'completed' ? num('00:00:00') : '—' ]) ]);
+				if (j.error) row.appendChild(alertBox(j.state === 'queued' ? 'warn' : 'error', 'alert', msgOf(j.error)));
+				if (j.state === 'queued' && j.retry_at > r.clock.now) row.appendChild(E('small', {}, t('تلاش مجدد تا ', 'Retry in ') + (j.retry_at - r.clock.now) + t(' ثانیه', ' seconds')));
+				if (j.file) row.appendChild(E('code', { 'dir': 'ltr' }, j.file));
+				var controls = [];
+				function actionButton(label, action, ico) { return btn(label, function() { return call([ 'download-' + action, j.id ]).then(loadDownloads); }, 'soft-blue mk-small', ico); }
+				if (j.state === 'queued' || j.state === 'downloading') controls.push(actionButton(t('توقف', 'Pause'), 'pause', 'x'));
+				if (j.state === 'paused' || j.state === 'failed') controls.push(actionButton(t('ادامه / تلاش دوباره', 'Resume / retry'), 'resume', 'refresh'));
+				if (j.state !== 'deleting' && j.state !== 'renaming') controls.push(btn(t('حذف فایل', 'Delete file'), function() {
+					if (!confirm(t('این دانلود و فایل کامل یا نیمه‌کارهٔ آن برای همیشه حذف شود؟', 'Permanently delete this download and its completed or partial file?'))) return;
+					return call([ 'download-remove', j.id ]).then(loadDownloads);
+				}, 'soft-red mk-small', 'trash'));
+				if (j.state === 'completed') controls.push(btn(t('تغییر نام', 'Rename'), function() {
+					var newName = E('input', { 'value': j.name, 'maxlength': '120' }), msg = E('p');
+					modal(t('تغییر نام فایل', 'Rename file'), [ field(t('نام جدید', 'New name'), newName), msg, actions([
+						btn(t('ذخیره', 'Save'), function() { return call([ 'download-rename', j.id, newName.value.trim() ]).then(function() { ui.hideModal(); return loadDownloads(); }).catch(function(e) { msg.textContent = msgOf(e); }); }, 'success', 'check'),
+						btn(t('انصراف', 'Cancel'), ui.hideModal, 'soft-violet', 'x') ]) ], 'folder');
+				}, 'soft-blue mk-small', 'folder'));
+				if (j.power) row.appendChild(E('small', {}, t('خاموشی پس از اتمام موفق صف درخواست شده است.', 'Shutdown requested after the queue completes successfully.')));
+				row.appendChild(E('div', { 'class': 'mk-row' }, controls)); downloadList.appendChild(row);
+			});
+		}
+		function loadDownloads() {
+			if (downloadLoading) return downloadLoading;
+			downloadLoading = call([ 'download-list' ]).then(paintDownloads).catch(function(e) { queueNote.replaceChildren(alertBox('error', 'alert', msgOf(e))); }).finally(function() { downloadLoading = null; });
+			return downloadLoading;
+		}
+		var downloadQueue = card(t('صف دانلودها', 'Download queue'), [ field(t('نحوهٔ اجرا', 'Execution mode'), queueMode), queueNote, shutdownBox,
+			E('div', { 'class': 'mk-row' }, [ btn(t('توقف همه', 'Pause all'), function() { return call([ 'download-pause-all' ]).then(loadDownloads); }, 'warn', 'x'), btn(t('ادامهٔ همه', 'Resume all'), function() { return call([ 'download-resume-all' ]).then(loadDownloads); }, 'success', 'refresh') ]),
+			E('div', { 'class': 'mk-grid mk-download-fields' }, [ downloadSearch, downloadFilter ]), downloadList,
+			E('small', {}, t('حذف فایل دائمی است. حداکثر ۱۰۰ مورد. زمان سپری‌شده فقط زمان انتقال را می‌شمارد؛ انتظار و توقف در آن نیست. زمان باقی‌مانده تخمینی است. ادامهٔ دانلود به پشتیبانی سرور از Range و شناسهٔ فایل بستگی دارد.', 'Deletion is permanent. Maximum 100 items. Elapsed time counts transfer time, excluding queue waits and pauses. Remaining time is an estimate. Resume requires server support for ranges and file validators.'))
+		], '#06b6d4', 'download');
+
 		/* ---------- Tabs ---------- */
 		var tabBar = E('div', { 'class': 'mk-tabs', 'role': 'tablist' }), panels = {}, tabButtons = {}, loaders = {}, activeTab = 'home';
 		/* Setup order is disk first: without a saved tab and without ready storage, open the Disk tab. */
@@ -929,10 +1142,11 @@ return view.extend({
 			panels[id] = E('div', { 'class': 'mk-panel', 'role': 'tabpanel' }, content);
 			if (loader) loaders[id] = loader;
 		}
-		addTab('home', t('خانه', 'Home'), 'home', [ metrics, usageCard ]);
+		addTab('home', t('خانه', 'Home'), 'home', [ metrics, fullBox, usageCard ]);
 		addTab('disk', t('دیسک', 'Disk'), 'drive', [ planner, libraryCard, E('div', { 'class': 'mk-columns' }, [ maintenance, storageCard ]) ], loadLibrary);
 		addTab('users', t('کاربران', 'Users'), 'users', [ users ]);
 		addTab('services', t('سرویس‌ها', 'Services'), 'pulse', [ services ]);
+		addTab('downloads', t('مدیریت دانلود', 'Download manager'), 'download', [ downloadSettings, clockCard, newDownload, downloadQueue ], loadDownloads);
 		addTab('remote', t('دسترسی از بیرون', 'Remote access'), 'globe', [ remoteCard ], loadRemote);
 		addTab('trash', t('سطل بازیابی', 'Recovery trash'), 'trash', [ trash ], loadTrash);
 
@@ -950,12 +1164,13 @@ return view.extend({
 		var tick = function() {
 			if (!root.isConnected) { poll.remove(tick); return; }
 			ticks++;
+			if (activeTab === 'downloads') return loadDownloads();
 			if (data.job && data.job.state === 'running') {
 				/* Light job check every 3 s; full refresh once the job has finished. */
 				return call([ 'storage-job' ]).then(function(job) {
 					data.job = job;
-					if (job.state === 'running') showJob(job);
-					else return refresh();
+					showJob(job);
+					if (job.state !== 'running') return refresh();
 				}).catch(function() {});
 			}
 			if (ticks % 5 === 0) return refresh().then(function() {
