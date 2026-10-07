@@ -557,3 +557,40 @@ The package contains no compiled code, so an SDK for any target works: a 25.12 S
 Copyright © 2026 dreamboxone. This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License version 3 as published by the Free Software Foundation. It is distributed WITHOUT ANY WARRANTY. See [LICENSE](LICENSE). Anyone who redistributes Makhzan or a modified version must keep this copyright notice and license and publish the complete corresponding source. The bundled Vazirmatn font is licensed under the SIL Open Font License 1.1.
 
 Support: [t.me/routekernel1](https://t.me/routekernel1)
+
+---
+
+<div dir="rtl">
+
+## 💚 حمایت از این پروژه
+
+اگر این پروژه به کارتان آمده، می‌توانید با واریز تتر از آن حمایت کنید:
+
+**USDT (تتر) — فقط شبکه BEP20 (BSC)**
+
+</div>
+
+```
+0x56daaa6b76d88ee0c8dba8042121f4b77de0a813
+```
+
+<div dir="rtl">
+
+> ⚠️ این آدرس فقط برای واریز تتر در شبکه BEP20 (BSC) است. واریز ارز دیگر یا از شبکه دیگر به این آدرس از دست می‌رود.
+
+</div>
+
+---
+
+## 💚 Support this project
+
+If this project has been useful to you, you can support it with Tether:
+
+**USDT — BEP20 (BSC) network only**
+
+```
+0x56daaa6b76d88ee0c8dba8042121f4b77de0a813
+```
+
+> [!WARNING]
+> This address is for USDT on the BEP20 (BSC) network only. Any other coin, or USDT sent over any other network, is lost.
