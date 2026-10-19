@@ -47,6 +47,7 @@ case "$format" in
 	ipk) opkg install python3 >/dev/null ;;
 esac
 python3 /ci/test-download-queue.py
+python3 /ci/test-storage-reconnect.py
 /usr/sbin/makhzanctl add-user Invalid-Name | grep -q '"ok":false'
 /usr/sbin/makhzanctl mkdir nobody x | grep -q '"ok":false'
 /usr/sbin/makhzanctl language en | grep -q '"ok":true'

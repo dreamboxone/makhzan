@@ -399,6 +399,18 @@ set_root() {
 	makhzan_usb_mount "$p" || { fail 'Only a mounted USB flash drive or USB hard disk with ext2/3/4, btrfs or xfs is allowed'; return; }
 	uci set makhzan.main.root="$p"; uci commit makhzan
 	ensure_layout || return
+	# Keep the selected disk's identity outside the package configuration, which is deleted on removal.
+	set -- $(awk -v m="$p" '$2==m {print $1, $3, $4; exit}' /proc/mounts)
+	selected_uuid=$(block info "$1" 2>/dev/null | sed -n 's/.* UUID="\([^"]*\)".*/\1/p')
+	[ -n "$selected_uuid" ] || { fail 'Could not save USB mount configuration'; return; }
+	uci set fstab.makhzan_nas=mount &&
+		uci set fstab.makhzan_nas.uuid="$selected_uuid" &&
+		uci set fstab.makhzan_nas.target="$p" &&
+		uci set fstab.makhzan_nas.fstype="$2" &&
+		uci set fstab.makhzan_nas.options="$3" &&
+		uci set fstab.makhzan_nas.enabled=1 && uci commit fstab || {
+		fail 'Could not save USB mount configuration'; return;
+	}
 	smb_sync || { fail 'Samba configuration or restart failed'; return; }
 	ok
 }

@@ -6,6 +6,8 @@
 
 حذف یا توقف دانلود هنگام بررسی اولیه لینک، دیگر با خطای اتصال بازنویسی نمی‌شود. تست خودکار، دو نوبت ده‌فایلی همراه با دانلود واقعی HTTP، بررسی صحت فایل‌ها، حذف و افزودن دوباره، اطلاعات قدیمی پردازش و حذف حین خطا را پوشش می‌دهد.
 
+برای دیسک‌هایی که از بخش «حافظه آماده» انتخاب شده‌اند، شناسه UUID و مشخصات mount اکنون حفظ می‌شوند تا پس از حذف و نصب برنامه، دیسک قبلی بدون فرمت دوباره متصل شود. دکمه اتصال دوباره نیز در صورت پیدا نشدن دیسک، راهنمای روشن نمایش می‌دهد.
+
 > **برای ارتقا، نسخه جدید را روی قبلی نصب کنید و اول حذف نکنید**.
 
 یک بسته برای **همه معماری‌ها**: مخزن کد کامپایل‌شده ندارد، پس همین فایل‌ها روی همه روترها نصب می‌شوند.
@@ -46,6 +48,8 @@ opkg install /tmp/@IPK@
 Fixes new downloads waiting indefinitely when the scheduler service is stopped. Adding links, resuming downloads and enabling the manager now start the service when needed. Startup after upgrades and router boots is repaired, and the page reports a stopped scheduler.
 
 Deletion or pause during the initial link probe can no longer be overwritten by a connection failure. Automated regression coverage includes two batches of ten real HTTP downloads, file hashes, deletion and subsequent downloads, stale process markers, and deletion during a failed probe.
+
+Selecting an existing mounted disk now saves its UUID and mount settings outside the package configuration, allowing reconnection after removal and reinstallation without formatting. The reconnect button reports a missing disk with an actionable message.
 
 > **To upgrade, install the new version over the existing one; do not uninstall first.**
 

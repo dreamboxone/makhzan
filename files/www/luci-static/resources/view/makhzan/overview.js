@@ -116,6 +116,7 @@ function logo(height) {
 
 /* Persian translations of backend errors; unknown messages are shown as-is. */
 var FA_ERRORS = {
+	'Could not save USB mount configuration': 'ثبت مشخصات اتصال دیسک انجام نشد؛ دوباره تلاش کنید.',
 	'Another operation is running; wait until it completes': 'عملیات دیگری در حال اجراست؛ کمی صبر کنید.',
 	'Another storage operation is running': 'عملیات دیگری روی حافظه در حال اجراست.',
 	'USB storage is not ready: select a mounted USB ext4 disk': 'حافظه USB آماده نیست؛ یک دیسک USB با فایل‌سیستم ext4 انتخاب کنید.',
@@ -667,7 +668,10 @@ return view.extend({
 		var storageCard = card(t('حافظه آماده (بدون پاک‌کردن)', 'Existing storage (no erase)'), [
 			E('p', { 'class': 'mk-muted' }, t('دیسک قبلی مخزن هنگام بازکردن صفحه خودکار mount می‌شود و مسیرش در این کادر قرار می‌گیرد. برای دیسک دیگری که از قبل فرمت و mount شده، مسیر آن را وارد کنید؛ فایل‌های موجود حفظ می‌شوند.', 'Opening this page mounts the previously configured NAS disk and fills in its path. For another already formatted and mounted USB disk, enter its mount path; existing files are kept.')),
 			E('div', { 'class': 'mk-row mk-add' }, [ path, btn(t('انتخاب حافظه', 'Select storage'), function() { return call([ 'root', path.value.trim() ]).then(function() { pathEdited = false; return refresh(); }); }, 'primary', 'check'),
-				btn(t('اتصال دوباره دیسک قبلی', 'Reconnect previous disk'), function() { return call([ 'storage-ready' ]).then(function() { pathEdited = false; return refresh(); }); }, 'soft-blue', 'drive') ])
+				btn(t('اتصال دوباره دیسک قبلی', 'Reconnect previous disk'), function() { return call([ 'storage-ready' ]).then(function(r) {
+					if (!r.root) throw new Error(t('دیسک قبلی پیدا نشد. اتصال USB را بررسی کنید؛ اگر دیسک در فهرست دیده می‌شود، مسیر حافظه آماده را انتخاب کنید. نیازی به فرمت نیست.', 'The previous disk was not found. Check its USB connection; if it appears in the disk list, select its existing mount path. Formatting is not required.'));
+					pathEdited = false; return refresh();
+				}); }, 'soft-blue', 'drive') ])
 		], '#3b82f6', 'drive');
 
 		/* ---------- Disk planner ---------- */

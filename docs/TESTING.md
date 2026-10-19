@@ -17,6 +17,8 @@ validate USB mounting, disconnects or persistence across a power cycle.
 | Recovery | Stopped service in the isolated fixture starts on add, repeated add and resume | Pass on router |
 | Recovery | Stop the real service with an empty queue; enabling the manager through the candidate starts it; status changes from scheduler_running=0 to 1 | Pass on router |
 | Concurrency | Pause or remove during the worker's failed initial probe; late failure preserves paused/deleting; deletion is completed by housekeeping | Pass on router |
+| Reconnect (r2) | Select an existing simulated USB mount; retain its UUID, filesystem and options in isolated fstab; clear package preferences, detach and reattach; reconnect restores the custom root and retains a sentinel file | Pass on router |
+| Reconnect (r2) | Missing disk returns no root; an explicitly released disk remains unmounted | Pass on router |
 
 The regression script runs against both package formats on all three CI architectures.
 The live router's NAS data and installed package were not modified by the fixture.
