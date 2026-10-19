@@ -33,6 +33,11 @@ jobs:
         run: for f in overview calendar; do node --check files/www/luci-static/resources/view/makhzan/$f.js; done
       - name: Persian calendar
         run: node scripts/test-download-calendar.cjs
+      - name: Version consistency
+        run: |
+          version=$(sed -n 's/^PKG_VERSION:=//p' Makefile)
+          grep -qx "VERSION=$version" files/usr/sbin/makhzanctl
+          grep -qx "var VERSION = '$version';" files/www/luci-static/resources/view/makhzan/overview.js
       - name: Every backend message has a Persian translation
         run: python3 .github/scripts/check-translations.py
 

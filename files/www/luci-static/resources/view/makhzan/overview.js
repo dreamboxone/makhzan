@@ -15,7 +15,7 @@
 'require poll';
 'require view.makhzan.calendar as calendar';
 
-var VERSION = '2.0.2';
+var VERSION = '2.0.3';
 /* Replaced with VERSION-RELEASE at package build time; busts the browser cache for theme.css. */
 var BUILD = '@MAKHZAN_BUILD@';
 var callExec = rpc.declare({ object: 'file', method: 'exec', params: [ 'command', 'params', 'env' ] });
