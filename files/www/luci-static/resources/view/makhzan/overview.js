@@ -1339,6 +1339,7 @@ return view.extend({
 				if (b.dataset.running !== '1') b.disabled = b.dataset.locked === '1';
 			});
 			queueNote.replaceChildren();
+			if (r.scheduler_running === 0) queueNote.appendChild(alertBox('warn', 'alert', t('سرویس دانلود متوقف است؛ افزودن لینک یا ادامه دانلود، سرویس را دوباره راه‌اندازی می‌کند.', 'The download service is stopped. Add a link or resume a download to start it again.')));
 			if (!r.enabled) queueNote.appendChild(alertBox('', 'download', t('مدیر دانلود خاموش است؛ فایل‌ها در صف می‌مانند تا آن را روشن کنید.', 'Download manager is disabled; queued files wait until you enable it.')));
 			if (r.enabled && r.window && !r.in_window) queueNote.appendChild(alertBox('', 'clock', [ t('خارج از ساعت مجاز دانلود هستیم؛ صف از ', 'Outside download hours; the queue continues from '), num(hhmm(r.window_start)), t(' تا ', ' until '), num(hhmm(r.window_end)), t(' ادامه می‌یابد.', '.') ]));
 			if (!r.clock.synced) queueNote.appendChild(alertBox('warn', 'clock', t('ساعت هنوز در این روشن‌شدن با اینترنت همگام نشده؛ دانلودهای زمان‌دار منتظر می‌مانند. دانلود فوری می‌تواند اجرا شود.', 'Time has not synchronized during this boot. Scheduled jobs wait; immediate jobs can run.')));

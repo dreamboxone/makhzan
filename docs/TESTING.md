@@ -2,6 +2,27 @@
 
 Copyright (C) 2026 dreamboxone. SPDX-License-Identifier: GPL-3.0-only.
 
+## Version 2.0.3 (2026-10-19)
+
+Google WiFi on OpenWrt 25.12.5, with no USB disk connected. Queue tests used the
+production downloader in a private temporary store, replacing only storage checks,
+service management and preferences. HTTP transfers, metadata, scheduler selection,
+worker detection and removal used the actual downloader functions. This does not
+validate USB mounting, disconnects or persistence across a power cycle.
+
+| Area | Test | Result |
+|---|---|---|
+| Queue | Download and hash-check ten files, remove all files and metadata, then repeat with ten new files; each URL fetched once | Pass on router |
+| Queue | Add another file with a stale marker pointing to an unrelated live process; completed history is not restarted by a repeated request or deletion of its file | Pass on router |
+| Recovery | Stopped service in the isolated fixture starts on add, repeated add and resume | Pass on router |
+| Recovery | Stop the real service with an empty queue; enabling the manager through the candidate starts it; status changes from scheduler_running=0 to 1 | Pass on router |
+| Concurrency | Pause or remove during the worker's failed initial probe; late failure preserves paused/deleting; deletion is completed by housekeeping | Pass on router |
+
+The regression script runs against both package formats on all three CI architectures.
+The live router's NAS data and installed package were not modified by the fixture.
+
+## Earlier verification
+
 Device: Google WiFi (ipq40xx/chromium), OpenWrt 25.12.5, samba4-server 4.22.7,
 minidlna 1.3.3, 16 GB USB flash drive. Client: Windows 11. Date: 2026-09-26.
 

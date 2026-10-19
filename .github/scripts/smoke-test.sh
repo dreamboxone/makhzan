@@ -41,6 +41,12 @@ echo "$status" | grep -q '"ready":false'
 /usr/sbin/makhzanctl storage-devices | grep -q '"ok":true'
 /usr/sbin/makhzanctl storage-ready | grep -q '"root":""'
 /usr/sbin/makhzanctl storage-job | grep -q '"state":"idle"'
+echo "== repeated download batches and interrupted deletion"
+case "$format" in
+	apk) apk add python3 >/dev/null ;;
+	ipk) opkg install python3 >/dev/null ;;
+esac
+python3 /ci/test-download-queue.py
 /usr/sbin/makhzanctl add-user Invalid-Name | grep -q '"ok":false'
 /usr/sbin/makhzanctl mkdir nobody x | grep -q '"ok":false'
 /usr/sbin/makhzanctl language en | grep -q '"ok":true'

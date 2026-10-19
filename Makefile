@@ -8,8 +8,8 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-makhzan
-PKG_VERSION:=2.0.2
-PKG_RELEASE:=3
+PKG_VERSION:=2.0.3
+PKG_RELEASE:=1
 PKG_LICENSE:=GPL-3.0-only
 PKG_LICENSE_FILES:=LICENSE
 PKG_MAINTAINER:=dreamboxone
@@ -82,6 +82,8 @@ define Package/luci-app-makhzan/postinst
 	rm -f /tmp/luci-indexcache* 2>/dev/null
 	rm -rf /tmp/luci-modulecache 2>/dev/null
 	/etc/init.d/rpcd reload >/dev/null 2>&1
+	# default_postinst does not enable init scripts on upgrade; the downloader is new in older installs.
+	/etc/init.d/makhzan-download enable >/dev/null 2>&1
 	# OpenWrt's default_postinst then runs /etc/init.d/makhzan start, which restores saved shares,
 	# the lockout policy and DLNA after a reinstall or upgrade (a no-op until Makhzan was applied once).
 }

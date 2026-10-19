@@ -2,9 +2,9 @@
 
 ## مخزن @TAG@ — فایل‌سرور خانگی برای OpenWrt
 
-نسخه ۲ **مدیر دانلود** را به مخزن اضافه می‌کند: دانلود مستقیم روی دیسک USB با چند اتصال همزمان برای هر فایل، دکمه «دانلود» برای شروع فوری، صف تا ۶ فایل همزمان، زمان‌بندی با تقویم شمسی، دانلود در ساعت‌های دلخواه، سقف سرعت کلی و جداگانه، بررسی کد فایل (SHA-256 یا MD5)، ادامه بعد از قطعی و پشتیبانی از لینک‌های دارای رمز، Referer و Cookie.
+این نسخه ماندن دانلودهای جدید در صف هنگام توقف سرویس دانلود را برطرف می‌کند: افزودن لینک، ادامه دانلود و روشن‌کردن مدیر، سرویس را در صورت نیاز دوباره راه‌اندازی می‌کنند. راه‌اندازی سرویس پس از ارتقا و روشن‌شدن روتر نیز اصلاح شده و توقف سرویس در رابط نمایش داده می‌شود.
 
-همچنین بخش تقسیم دیسک حالا طرح فعلی دیسک را نشان می‌دهد و اجازه نمی‌دهد جمع سهم‌ها از حجم دیسک بیشتر شود؛ فایل‌سرور تمام فضای اختصاص‌یافته را بدون رزرو ۵٪ در اختیار می‌گذارد؛ و رابط کاربری در موبایل و در حالت روشن و تیره بهتر شده است.
+حذف یا توقف دانلود هنگام بررسی اولیه لینک، دیگر با خطای اتصال بازنویسی نمی‌شود. تست خودکار، دو نوبت ده‌فایلی همراه با دانلود واقعی HTTP، بررسی صحت فایل‌ها، حذف و افزودن دوباره، اطلاعات قدیمی پردازش و حذف حین خطا را پوشش می‌دهد.
 
 > **برای ارتقا، نسخه جدید را روی قبلی نصب کنید و اول حذف نکنید**.
 
@@ -43,9 +43,9 @@ opkg install /tmp/@IPK@
 
 ## Makhzan @TAG@ — home NAS for OpenWrt
 
-Version 2 adds a **download manager**: downloads go straight to the USB disk with several connections per file, a Download button that starts at once, a queue of up to six files at a time, Persian-calendar scheduling, download hours, total and per-download speed limits, checksum verification (SHA-256 or MD5), resume after disconnects, and links that need a password, Referer or Cookie.
+Fixes new downloads waiting indefinitely when the scheduler service is stopped. Adding links, resuming downloads and enabling the manager now start the service when needed. Startup after upgrades and router boots is repaired, and the page reports a stopped scheduler.
 
-The disk planner now shows the disk's current layout and never lets the roles add up to more than the disk; the file server gets all of its space (no 5% root reserve); and the interface works better on phones and in light and dark mode.
+Deletion or pause during the initial link probe can no longer be overwritten by a connection failure. Automated regression coverage includes two batches of ten real HTTP downloads, file hashes, deletion and subsequent downloads, stale process markers, and deletion during a failed probe.
 
 > **To upgrade, install the new version over the existing one; do not uninstall first.**
 

@@ -10,6 +10,12 @@
 START=99
 
 start() {
+	# Package upgrades only start init scripts that are new to the package and never enable them, so the
+	# downloader would be missing after the next reboot and new links would wait in the queue forever.
+	if [ -x /etc/init.d/makhzan-download ]; then
+		/etc/init.d/makhzan-download enabled || /etc/init.d/makhzan-download enable
+		/etc/init.d/makhzan-download running || /etc/init.d/makhzan-download start
+	fi
 	# Fully detached: package-manager scripts and init may end before the NAS disk is mounted.
 	if command -v setsid >/dev/null; then
 		setsid /usr/sbin/makhzanctl boot </dev/null >/dev/null 2>&1 &

@@ -74,6 +74,11 @@ open_store() {
 }
 acquire() { lock "$LOCK" || exit 1; HAVE_LOCK=1; }
 unlock() { lock -u "$LOCK"; HAVE_LOCK=0; }
+ensure_scheduler() {
+ /etc/init.d/makhzan-download running >/dev/null 2>&1 ||
+  /etc/init.d/makhzan-download start >/dev/null 2>&1 ||
+  logger -t makhzan-download 'Could not start download scheduler'
+}
 read_job() {
  valid_id "$1" && [ -d "jobs/$1" ] && [ ! -L "jobs/$1" ] && [ ! -L "jobs/$1/meta.json" ] || return 1
  json_load "$(cat "jobs/$1/meta.json" 2>/dev/null)" || return 1
@@ -249,7 +254,7 @@ add() {
  acquire
  storage_busy && { unlock; err 'A disk operation is running'; }
  # A repeated RPC with the same token cannot create or restart a second download.
- if [ -f "jobs/$token/meta.json" ]; then unlock; ok; return; fi
+ if [ -f "jobs/$token/meta.json" ]; then unlock; ensure_scheduler; ok; return; fi
  ! duplicate_link "$url" || { unlock; err 'This link is already in the download list'; }
  probe=$(probe_size "$url" "$auth_tmp") || { unlock; err 'The server did not report the file size; free space cannot be verified'; }
  expected=${probe%% *}; ranges=${probe#* }
@@ -264,7 +269,7 @@ add() {
  sync
  rm -f "$RUN/shutdown" "$RUN/power-request"
  [ "$immediate" = 0 ] || touch "$RUN/immediate"
- unlock; ok
+ unlock; ensure_scheduler; ok
 }
 delete_job() {
  # Both locations are descendants of the pinned, root-writable USB directory.
@@ -320,7 +325,9 @@ action() {
  save_job || { unlock; err 'Could not save download on USB'; }
  rm -f "$RUN/shutdown" "$RUN/power-request"
  [ "$immediate" = 0 ] || touch "$RUN/immediate"
- unlock; ok
+ unlock
+ case "$op" in resume|start-now|redownload) ensure_scheduler;; esac
+ ok
 }
 # Move a waiting download earlier or later. Orders of the affected items are exchanged, so
 # every other item keeps its place.
@@ -368,13 +375,16 @@ all_action() {
    clear-finished:failed|clear-finished:cancelled) worker_alive "$id" || { state=deleting; save_job; delete_job; };;
   esac
  done
- rm -f "$RUN/shutdown" "$RUN/power-request"; unlock; ok
+ rm -f "$RUN/shutdown" "$RUN/power-request"; unlock
+ [ "$1" != resume-all ] || ensure_scheduler
+ ok
 }
 list() {
  clock=$(clock_status)
  ready=0; open_store && ready=1
  available=0; command -v curl >/dev/null && available=1
  active=0; worker_alive && active=1
+ scheduler=0; /etc/init.d/makhzan-download running >/dev/null 2>&1 && scheduler=1
  deadline=$(cat "$RUN/shutdown" 2>/dev/null); left=0
  if uint "$deadline"; then left=$((deadline - $(uptime_s))); [ "$left" -gt 0 ] || left=1; fi
  # Save each object before opening the response builder: jshn has one global namespace.
@@ -410,8 +420,8 @@ list() {
  redial=0; retry_enabled && redial=1
  win=0; window_enabled && win=1
  inwin=0; in_window && inwin=1
- printf '{"ok":true,"ready":%s,"installed":%s,"active":%s,"enabled":%s,"limit":%s,"parallel":%s,"redial":%s,"retry_interval":%s,"shutdown_seconds":%s,"segments":%s,"window":%s,"window_start":%s,"window_end":%s,"in_window":%s,"clock":%s,"jobs":[%s]}
-' "$ready" "$available" "$active" "$on" "$(bandwidth)" "$(parallel)" "$redial" "$(retry_interval)" "$left" "$(segments_default)" "$win" "$(window_start)" "$(window_end)" "$inwin" "$clock" "$items"
+ printf '{"ok":true,"ready":%s,"installed":%s,"active":%s,"scheduler_running":%s,"enabled":%s,"limit":%s,"parallel":%s,"redial":%s,"retry_interval":%s,"shutdown_seconds":%s,"segments":%s,"window":%s,"window_start":%s,"window_end":%s,"in_window":%s,"clock":%s,"jobs":[%s]}
+' "$ready" "$available" "$active" "$scheduler" "$on" "$(bandwidth)" "$(parallel)" "$redial" "$(retry_interval)" "$left" "$(segments_default)" "$win" "$(window_start)" "$(window_end)" "$inwin" "$clock" "$items"
 }
 all_done() {
  found=0
@@ -478,7 +488,9 @@ worker() {
  [ ! -L "jobs/$id/payload.part" ] || exit 1
  probe=$(probe_size "$url" "jobs/$id/auth.conf" "jobs/$id/validator.new") || {
   probe_error=$?
-  acquire; read_job "$target"; retry_job "$probe_error"
+  acquire
+  read_job "$target" && [ "$state" = downloading ] || { unlock; exit 1; }
+  retry_job "$probe_error"
   [ "$probe_error" != 99 ] || error='The server did not report the file size; free space cannot be verified'
   save_job; unlock; exit 1
  }
@@ -494,13 +506,17 @@ worker() {
  fi
  [ "$segN" -ge 2 ] || segN=1
  acquire
- latest_size=$expected; read_job "$target"; expected=$latest_size
+ latest_size=$expected
+ read_job "$target" || { unlock; return; }
+ expected=$latest_size
  [ "$state" = downloading ] || { unlock; return; }
  if ! space_available "$id" "$expected" "$segN"; then state=failed; error='Not enough free USB space for this download and the queued files'; save_job; unlock; exit 1; fi
  save_job; unlock
  free=$(df -Pk . | awk 'NR==2 {print $4}')
  if [ "${free:-0}" -lt 65536 ]; then
-  acquire; read_job "$target"; state=failed; error='Not enough free USB space (64 MB reserve required)'; save_job; unlock; exit 1
+  acquire
+  read_job "$target" && [ "$state" = downloading ] || { unlock; exit 1; }
+  state=failed; error='Not enough free USB space (64 MB reserve required)'; save_job; unlock; exit 1
  fi
  redirect='=http,https'; case "$url" in https:*) redirect='=https';; esac
  # A job limit is the total for this download; otherwise the global limit is shared by the queue.
@@ -677,7 +693,7 @@ case "$1" in
   uci commit makhzan && ok;;
  limit) [ "$2" = 0 ] || { uint "$2" && [ "$2" -ge 1 ] && [ "$2" -le 65536 ]; } || err 'Bandwidth must be between 1 and 65536 KB/s'; uci set makhzan.main.download_limit="$2" && uci commit makhzan && ok;;
  redial) case "$2" in 0|1) ;; *) err 'Invalid redial option';; esac; uint "$3" && [ "$3" -ge 1 ] && [ "$3" -le 3600 ] || err 'Retry interval must be between 1 and 3600 seconds'; uci set makhzan.main.download_retry_enabled="$2"; uci set makhzan.main.download_retry_interval="$3"; uci commit makhzan && ok;;
- enabled) case "$2" in 0|1) acquire; uci set makhzan.main.download_enabled="$2" && uci commit makhzan; [ "$2" != 0 ] || stop_workers; unlock; ok;; *) err 'Invalid enabled value';; esac;;
+ enabled) case "$2" in 0|1) acquire; uci set makhzan.main.download_enabled="$2" && uci commit makhzan; [ "$2" != 0 ] || stop_workers; unlock; [ "$2" != 1 ] || ensure_scheduler; ok;; *) err 'Invalid enabled value';; esac;;
  stop-workers) stop_workers;;
  add) shift; add "$@";;
  pause|resume|cancel|remove|rename|relink|rate|start-now|redownload) action "$1" "$2" "$3";;
